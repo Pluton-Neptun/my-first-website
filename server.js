@@ -57,6 +57,7 @@ app.post("/register", (req, res) => {
 
 
 // Динамический маршрут для страницы входа
+// Динамический маршрут для страницы входа
 app.get("/login", (req, res) => {
     const users = JSON.parse(fs.readFileSync(usersFile, "utf8"));
     const chessCount = users.filter(user => user.activities && user.activities.includes("Шахматы")).length;
@@ -71,76 +72,34 @@ app.get("/login", (req, res) => {
             <title>Вход и Активности</title>
             <style>
                 body {
-                    font-family: Arial, sans-serif;
-                    display: flex;
-                    justify-content: center;
-                    align-items: center;
-                    min-height: 100vh;
-                    background-image: url('/images/background.jpg');
-                    background-size: cover;
-                    background-position: center;
-                    background-attachment: fixed;
-                    padding: 20px;
-                    margin: 0;
-                    flex-direction: column;
+                    font-family: Arial, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh;
+                    background-image: url('/images/background.jpg'); background-size: cover; background-position: center;
+                    background-attachment: fixed; padding: 20px; margin: 0; flex-direction: column;
                 }
-                .container {
-                    width: 100%;
-                    max-width: 500px;
-                }
+                .container { width: 100%; max-width: 500px; }
                 .activities-block {
-                    background: rgba(0, 0, 0, 0.7);
-                    color: white;
-                    padding: 20px;
-                    border-radius: 8px;
-                    box-shadow: 0 0 10px rgba(0,0,0,0.1);
-                    margin-bottom: 20px;
+                    background: rgba(0, 0, 0, 0.7); color: white; padding: 20px;
+                    border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); margin-bottom: 20px;
                 }
-                .activities-block h2 {
-                    margin-top: 0;
-                    text-align: center;
-                }
+                .activities-block h2 { margin-top: 0; text-align: center; }
                 .activity {
-                    background-color: #4CAF50;
-                    padding: 15px;
-                    margin-bottom: 5px;
-                    border-radius: 5px;
-                    display: flex;
-                    justify-content: space-between;
+                    background-color: #4CAF50; padding: 15px; margin-bottom: 5px; border-radius: 5px;
+                    display: flex; justify-content: space-between;
                 }
-                form {
-                    background: rgba(0, 0, 0, 0.7);
-                    color: white;
-                    padding: 30px;
-                    border-radius: 8px;
-                }
-                form h2 {
-                    text-align: center;
-                    margin-top: 0;
-                }
-                input {
-                    width: 95%;
-                    padding: 12px;
-                    margin-bottom: 15px;
-                    border-radius: 5px;
-                    border: 1px solid #ccc;
-                }
-                button {
-                    width: 100%;
-                    padding: 12px;
-                    border: none;
-                    border-radius: 5px;
-                    background-color: #007BFF;
-                    color: white;
-                    font-size: 16px;
-                    cursor: pointer;
-                }
+                form { background: rgba(0, 0, 0, 0.7); color: white; padding: 30px; border-radius: 8px; }
+                form h2 { text-align: center; margin-top: 0; }
+                input { width: 95%; padding: 12px; margin-bottom: 15px; border-radius: 5px; border: 1px solid #ccc; }
+                button { width: 100%; padding: 12px; border: none; border-radius: 5px; background-color: #007BFF; color: white; font-size: 16px; cursor: pointer; }
                 button:hover { background-color: #0056b3; }
-                a {
-                    color: #6cafff;
-                    display: block;
+                a { color: #6cafff; display: block; text-align: center; margin-top: 15px; }
+                
+                /* ✅ НОВЫЙ СТИЛЬ ДЛЯ ПРЕДЛОЖЕНИЯ */
+                .special-offer {
+                    background-color: #e91e63; /* Розовый цвет */
+                    justify-content: center;
                     text-align: center;
-                    margin-top: 15px;
+                    font-weight: bold;
+                    font-size: 1.1em;
                 }
             </style>
         </head>
@@ -151,6 +110,9 @@ app.get("/login", (req, res) => {
                     <div class="activity"><span>Шахматы</span><span>Участников: ${chessCount}</span></div>
                     <div class="activity"><span>Футбол</span><span>Участников: ${footballCount}</span></div>
                     <div class="activity"><span>Танцы</span><span>Участников: ${danceCount}</span></div>
+                    
+                    <div class="activity special-offer"><span>Я тебя люблю и хочешь подарю целую вечеринку в Париже! ❤️</span></div>
+
                 </div>
 
                 <form action="/login" method="POST">
@@ -233,6 +195,7 @@ app.get("/users", requireLogin, (req, res) => {
 
 // Отдельная страница с активностями
 // Отдельная страница с активностями (улучшенная версия)
+// Отдельная страница с активностями (улучшенная версия)
 app.get("/activities", requireLogin, (req, res) => {
     const users = JSON.parse(fs.readFileSync(usersFile, "utf8"));
     const chessCount = users.filter(user => user.activities && user.activities.includes("Шахматы")).length;
@@ -250,27 +213,25 @@ app.get("/activities", requireLogin, (req, res) => {
                 body { font-family: Arial, sans-serif; padding: 20px; background-color: #f0f0f0; margin: 0; }
                 .tab-container { max-width: 600px; margin: 20px auto; }
                 .tab-header {
-                    background-color: #4CAF50;
-                    color: white;
-                    padding: 15px;
-                    cursor: pointer;
-                    border: none;
-                    width: 100%;
-                    text-align: left;
-                    font-size: 18px;
-                    border-bottom: 1px solid #ddd;
-                    transition: background-color 0.3s;
+                    background-color: #4CAF50; color: white; padding: 15px; cursor: pointer; border: none; width: 100%;
+                    text-align: left; font-size: 18px; border-bottom: 1px solid #ddd; transition: background-color 0.3s;
                 }
                 .tab-header:hover { background-color: #45a049; }
-                .tab-content {
-                    padding: 15px;
-                    background-color: white;
-                    border: 1px solid #ddd;
-                    border-top: none;
-                    display: none;
-                }
+                .tab-content { padding: 15px; background-color: white; border: 1px solid #ddd; border-top: none; display: none; }
                 a { color: #4CAF50; text-decoration: none; font-weight: bold; }
                 a:hover { text-decoration: underline; }
+
+                /* ✅ НОВЫЙ СТИЛЬ ДЛЯ ПРЕДЛОЖЕНИЯ */
+                .special-offer {
+                    background-color: #e91e63; /* Розовый цвет */
+                    color: white;
+                    padding: 20px;
+                    margin-top: 15px;
+                    border-radius: 5px;
+                    text-align: center;
+                    font-weight: bold;
+                    font-size: 1.2em;
+                }
             </style>
         </head>
         <body>
@@ -284,6 +245,8 @@ app.get("/activities", requireLogin, (req, res) => {
 
                 <button class="tab-header" onclick="toggleTab('dance')">Танцы</button>
                 <div id="dance" class="tab-content"><p>Количество участников: ${danceCount}</p></div>
+
+                <div class="special-offer">Я тебя люблю и хочешь подарю целую вечеринку в Париже! ❤️</div>
                 
                 <br>
                 <a href="/profile">Вернуться в профиль</a>
@@ -301,8 +264,10 @@ app.get("/activities", requireLogin, (req, res) => {
             </script>
         </body>
         </html>
-    `); // ✅ ВОТ ИСПРАВЛЕНИЕ: добавлена закрывающая скобка и точка с запятой
+    `);
 });
+     // ✅ ВОТ ИСПРАВЛЕНИЕ: добавлена закрывающая скобка и точка с запятой
+
 
 // Этот код для запуска сервера уже стоит на правильном месте
 app.listen(PORT, () => {
