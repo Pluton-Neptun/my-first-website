@@ -5,7 +5,8 @@ import path from "path";
 import { fileURLToPath } from 'url';
 import session from "express-session";
 import cors from "cors"; 
-import MongoStore from 'connect-mongo';// ✅ ИСПРАВЛЕНО: Добавлен ObjectId в импорт
+import MongoStore from 'connect-mongo';
+// ✅ ИСПРАВЛЕНО: Добавлен ObjectId в импорт
 import { MongoClient, ObjectId } from "mongodb";
 import 'dotenv/config';
 
@@ -144,12 +145,14 @@ app.get("/activities", requireLogin, async (req, res) => {
     try {
         const users = await db.collection("users").find().toArray();
         let userActivities = [];
-      if (req.session.user && req.session.user._id) {
-            const currentUser = await db.collection("users").findOne({ _id: new ObjectId(req.session.user._id) });
-            if (currentUser) {
-                userActivities = currentUser.activities || [];
-            }
-        }
+     if (req.session.user && req.session.user._id) {
+    // БЫЛО: const currentUser = await db.collection("users").findOne({ _id: new ObjectId(req.session.user._id) });
+    // СТАЛО:
+    const currentUser = await db.collection("users").findOne({ _id: ObjectId.createFromHexString(req.session.user._id) });
+    if (currentUser) {
+        userActivities = currentUser.activities || [];
+    }
+}
         const chessCount = users.filter(u => u.activities?.includes("Шахматы")).length;
         const footballCount = users.filter(u => u.activities?.includes("Футбол")).length;
         const danceCount = users.filter(u => u.activities?.includes("Танцы")).length;
@@ -218,7 +221,7 @@ app.get("/activities", requireLogin, async (req, res) => {
 app.post("/update-activity", requireLogin, async (req, res) => {
     try {
         const { activity, action } = req.body;
-     const userId = new ObjectId(req.session.user._id);
+     const userId = ObjectId.createFromHexString(req.session.user._id);
         const usersCollection = db.collection("users");
         let updateQuery;
         if (action === "join") {
