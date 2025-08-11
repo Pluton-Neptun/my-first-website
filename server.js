@@ -5,6 +5,8 @@ import path from "path";
 import { fileURLToPath } from 'url';
 import session from "express-session";
 import cors from "cors";
+// ... другие ваши import
+import MongoStore from 'connect-mongo';
 
 // ✅ НОВЫЕ ИМПОРТЫ для работы с базой данных
 import { MongoClient } from "mongodb";
@@ -21,9 +23,12 @@ app.use(cors());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, "public")));
 app.use(session({
-    secret: "my_secret_key",
+   secret: "my_secret_key",
     resave: false,
-    saveUninitialized: false
+    saveUninitialized: false,
+    store: MongoStore.create({
+        mongoUrl: process.env.DATABASE_URL
+    }),
 }));
 
 // ✅ НАСТРОЙКА ПОДКЛЮЧЕНИЯ К БАЗЕ ДАННЫХ
