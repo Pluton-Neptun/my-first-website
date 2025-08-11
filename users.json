@@ -1,0 +1,19 @@
+[
+  {
+    "name": "Greg",
+    "email": "gregabel@gmail",
+    "password": "2222"
+  },
+  {
+    "name": "derek",
+    "email": "blasberg@gmail",
+    "password": "1111",
+    "registeredAt": "11.08.2025, 11:33:26"
+  },
+  {
+    "name": "Bass",
+    "email": "bass@mail.ru",
+    "password": "2231",
+    "registeredAt": "11.08.2025, 13:45:34"
+  }
+]
