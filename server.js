@@ -192,11 +192,21 @@ app.post("/logout", (req, res) => {
 });
 
 // СТРАНИЦА АКТИВНОСТЕЙ
+// СТРАНИЦА АКТИВНОСТЕЙ (с исправлением)
 app.get("/activities", requireLogin, async (req, res) => {
     try {
         const users = await db.collection("users").find().toArray();
-        const currentUser = await db.collection("users").findOne({ _id: new MongoClient.ObjectId(req.session.user._id) });
-        const userActivities = currentUser.activities || [];
+        
+        let userActivities = []; // По умолчанию считаем, что пользователь никуда не записан
+
+        // ✅ ИСПРАВЛЕНИЕ: Добавляем проверку, что пользователь и его ID существуют
+        if (req.session.user && req.session.user._id) {
+            const currentUser = await db.collection("users").findOne({ _id: new MongoClient.ObjectId(req.session.user._id) });
+            // Проверяем, что пользователь действительно найден в базе данных
+            if (currentUser) {
+                userActivities = currentUser.activities || [];
+            }
+        }
 
         const chessCount = users.filter(u => u.activities?.includes("Шахматы")).length;
         const footballCount = users.filter(u => u.activities?.includes("Футбол")).length;
