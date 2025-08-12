@@ -8,8 +8,8 @@ import cors from "cors";
 import MongoStore from 'connect-mongo';
 import { MongoClient, ObjectId } from "mongodb";
 import 'dotenv/config';
-import multer from 'multer'; // <--- ДОБАВЛЕН multer
-import fs from 'fs'; // <--- ДОБАВЛЕН fs для работы с файлами
+import multer from 'multer';
+import fs from 'fs';
 
 // --- Инициализация Express ---
 const __filename = fileURLToPath(import.meta.url);
@@ -27,8 +27,7 @@ const storage = multer.diskStorage({
         cb(null, uploadDir);
     },
     filename: function (req, file, cb) {
-        // Для уникальности добавляем временную метку к имени файла
-        cb(null, Date.now() + '-' + file.originalname);
+                cb(null, Date.now() + '-' + file.originalname);
     }
 });
 const upload = multer({ storage: storage });
@@ -38,7 +37,7 @@ const upload = multer({ storage: storage });
 app.use(cors());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, "public")));
-app.use('/uploads', express.static(uploadDir)); // <--- Сделали папку uploads доступной
+app.use('/uploads', express.static(uploadDir));
 app.use(session({
     secret: "my_secret_key",
     resave: false,
@@ -99,17 +98,26 @@ app.post("/register", async (req, res) => {
 });
 
 
-// СТРАНИЦА ВХОДА
+// СТРАНИЦA ВХОДА (с блоком "Работа")
 app.get("/login", async (req, res) => {
-    try {        const comments = await db.collection("comments").find().sort({ createdAt: -1 }).toArray();
+    try {
+        // Получаем комментарии
+        const comments = await db.collection("comments").find().sort({ createdAt: -1 }).toArray();
         let commentsHtml = comments.map(comment =>
             `<div class="comment"><b>${comment.authorName}:</b> ${comment.text}</div>`
         ).join('');
 
-      const users = await db.collection("users").find().toArray();
+        // Получаем данные для активностей
+        const users = await db.collection("users").find().toArray();
         const chessCount = users.filter(u => u.activities?.includes("Шахматы")).length;
         const footballCount = users.filter(u => u.activities?.includes("Футбол")).length;
         const danceCount = users.filter(u => u.activities?.includes("Танцы")).length;
+
+        // ✅ НОВОЕ: Получаем список задач в работе
+        const tasks = await db.collection('tasks').find().sort({ createdAt: -1 }).toArray();
+        let tasksHtml = tasks.map(task => 
+            `<div class="work-item"><span>${task.originalName}</span><span class="work-author">Загрузил: ${task.uploadedBy}</span></div>`
+        ).join('');
 
         res.send(`
             <!DOCTYPE html>
@@ -121,24 +129,43 @@ app.get("/login", async (req, res) => {
                         font-family: Arial, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh;
                         background-image: url('/images/background.jpg'); background-size: cover; background-position: center;
                         background-attachment: fixed; padding: 20px; margin: 0;
-                 }
+                    }
                     .main-wrapper {
                         display: flex; gap: 20px; align-items: flex-start;
-                        flex-wrap: wrap; justify-content: center;
+                        flex-wrap: wrap; justify-content: center; max-width: 1400px;
                     }
-                    .container { width: 100%; max-width: 500px; }
-                    .activities-block { background: rgba(0, 0, 0, 0.7); color: white; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); margin-bottom: 20px; }
-                    .activities-block h2 { margin-top: 0; text-align: center; }
+                    .container { width: 100%; max-width: 450px; }
+                    
+                    /* Общие стили для блоков */
+                    .activities-block, .comments-container, .work-block {
+                        background: rgba(0, 0, 0, 0.7); color: white; padding: 20px; border-radius: 8px;
+                        box-shadow: 0 0 10px rgba(0,0,0,0.1); margin-bottom: 20px;
+                    }
+                    .activities-block h2, .comments-container h3, .work-block h2 { margin-top: 0; text-align: center; }
+
+                    /* Стили для активностей */
                     .activity { background-color: #4CAF50; padding: 15px; margin-bottom: 5px; border-radius: 5px; display: flex; justify-content: space-between; }
+                    .special-offer { background-color: #e91e63; justify-content: center; text-align: center; font-weight: bold; font-size: 1.1em; }
+                    
+                    /* Стили для формы и ссылок */
                     form { background: rgba(0, 0, 0, 0.7); color: white; padding: 30px; border-radius: 8px; }
                     form h2 { text-align: center; margin-top: 0; }
                     input { width: 95%; padding: 12px; margin-bottom: 15px; border-radius: 5px; border: 1px solid #ccc; }
                     button { width: 100%; padding: 12px; border: none; border-radius: 5px; background-color: #007BFF; color: white; font-size: 16px; cursor: pointer; }
                     a { color: #6cafff; display: block; text-align: center; margin-top: 15px; }
-                 .special-offer { background-color: #e91e63; justify-content: center; text-align: center; font-weight: bold; font-size: 1.1em; }
-                    .comments-container { background: rgba(0, 0, 0, 0.7); color: white; padding: 20px; border-radius: 8px; width: 100%; max-width: 400px; }
-                    .comments-container h3 { margin-top: 0; text-align: center; }
+
+                    /* Стили для комментариев */
+                    .comments-container { max-width: 400px; }
                     .comment { background: rgba(255, 255, 255, 0.1); padding: 10px; border-radius: 5px; margin-bottom: 5px; word-wrap: break-word; }
+
+                    /* ✅ НОВЫЕ СТИЛИ: для блока "Работа" */
+                    .work-block { max-width: 400px; border-left: 3px solid #ff9800; }
+                    .work-item { 
+                        background-color: rgba(0, 123, 255, 0.3); padding: 15px; margin-bottom: 5px; border-radius: 5px; 
+                        display: flex; justify-content: space-between; align-items: center; word-break: break-all;
+                    }
+                    .work-author { font-size: 0.8em; opacity: 0.8; font-style: italic; }
+
                 </style>
             </head>
             <body>
@@ -146,6 +173,11 @@ app.get("/login", async (req, res) => {
                     <div class="comments-container">
                         <h3>Последние комментарии:</h3>
                         ${commentsHtml.length > 0 ? commentsHtml : "<p>Пока нет комментариев.</p>"}
+                    </div>
+
+                    <div class="work-block">
+                        <h2>Задачи в работе</h2>
+                        ${tasksHtml.length > 0 ? tasksHtml : "<p>В данный момент нет активных задач.</p>"}
                     </div>
 
                     <div class="container">
@@ -203,7 +235,7 @@ app.get("/profile", requireLogin, (req, res) => {
                 .content { background-color: rgba(0,0,0,0.7); padding: 20px; border-radius: 10px; max-width: 500px; margin: 20px auto; }
                 h2, p { margin-bottom: 15px; }
                 button, a { background-color: #444; color: white; padding: 8px 15px; border: none; border-radius: 5px; text-decoration: none; cursor: pointer; display: inline-block; margin: 5px; }
-                a.work-button { background-color: #ff9800; } /* <-- Стиль для кнопки "Работа" */
+                a.work-button { background-color: #ff9800; }
                 textarea { width: 95%; padding: 10px; margin-top: 10px; border-radius: 5px; border: 1px solid #ccc; font-family: Arial; }
                 .comment-form button { background-color: #007BFF; width: 100%; margin-top: 10px; }
             </style>
@@ -224,7 +256,8 @@ app.get("/profile", requireLogin, (req, res) => {
                 <form action="/logout" method="POST" style="display:inline-block;"><button type="submit">Выйти</button></form>
                 <a href="/">На главную</a>
                 <a href="/activities">Посмотреть активности</a>
-                <a href="/work" class="work-button">Перейти к работе</a> </div>
+                <a href="/work" class="work-button">Перейти к работе</a>
+            </div>
         </body>
         </html>
     `);
@@ -235,11 +268,11 @@ app.post("/post-comment", requireLogin, async (req, res) => {
     try {
         const { commentText } = req.body;
         const commentsCollection = db.collection("comments");
-     const newComment = {
+        const newComment = {
             authorName: req.session.user.name,
             text: commentText,
             createdAt: new Date()
-     };
+        };
         await commentsCollection.insertOne(newComment);
         res.redirect("/profile");
     } catch (error) {
@@ -255,7 +288,9 @@ app.post("/logout", (req, res) => {
         res.clearCookie('connect.sid');
         res.redirect('/');
     });
-});// СТРАНИЦА АКТИВНОСТЕЙ
+});
+
+// СТРАНИЦА АКТИВНОСТЕЙ
 app.get("/activities", requireLogin, async (req, res) => {
     try {
         const users = await db.collection("users").find().toArray();
@@ -326,7 +361,7 @@ app.post("/update-activity", requireLogin, async (req, res) => {
 });
 
 // =======================================================
-// ✅ НОВЫЕ МАРШРУТЫ ДЛЯ РАЗДЕЛА "РАБОТА"
+// МАРШРУТЫ ДЛЯ РАЗДЕЛА "РАБОТА"
 // =======================================================
 
 // 1. Отдать страницу "Работа"
@@ -389,15 +424,12 @@ app.post('/complete-task/:taskId', requireLogin, async (req, res) => {
             return res.status(404).send('Задача не найдена');
         }
 
-        // Перемещаем в коллекцию готовых
-        const readyDoc = {
+      const readyDoc = {
             ...task,
             completedAt: new Date()
         };
         await db.collection('ready_documents').insertOne(readyDoc);
-        
-        // Удаляем из коллекции задач
-        await db.collection('tasks').deleteOne({ _id: taskId });
+                await db.collection('tasks').deleteOne({ _id: taskId });
         
         res.json({ success: true, message: 'Задача перемещена в готовые' });
 
@@ -417,10 +449,8 @@ app.get('/download/:fileId', requireLogin, async (req, res) => {
             return res.status(404).send('Документ не найден.');
         }
 
-        const filePath = doc.path;
-        // Проверяем, существует ли файл, перед отправкой
-        if (fs.existsSync(filePath)) {
-            res.download(filePath, doc.originalName); // Отправляем файл на скачивание с его исходным именем
+        const filePath = doc.path;        if (fs.existsSync(filePath)) {
+            res.download(filePath, doc.originalName);
         } else {
              res.status(404).send('Файл не найден на сервере.');
         }
@@ -433,4 +463,4 @@ app.get('/download/:fileId', requireLogin, async (req, res) => {
 
 
 // --- ЗАПУСК ВСЕГО ПРИЛОЖЕНИЯ ---
-connectToDb(); 
+connectToDb();
