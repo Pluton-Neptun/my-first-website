@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Работа</title>
+    <style>
+      /* Базовые стили для вкладок */
+      .tabs {
+        margin-bottom: 20px;
+      }
+      .tab-button {
+        padding: 10px 15px;
+        border: 1px solid #ccc;
+        background-color: #f1f1f1;
+        cursor: pointer;
+      }
+      /* Стиль для активной кнопки вкладки */
+      .tab-button.active {
+        background-color: #ddd;
+        border-bottom: 1px solid #ddd;
+      }
+      /* Скрытие контента неактивных вкладок */
+      .tab-content {
+        display: none;
+        padding: 20px;
+        border: 1px solid #ccc;
+        border-top: none;
+      }
+      /* Показ контента активной вкладки */
+      .tab-content.active {
+        display: block;
+      }
+    </style>
+</head>
+<body>
+    <h1>Раздел "Работа"</h1>
+
+    <div class="tabs">
+      <button class="tab-button active" data-tab="tab-tasks">Задачи</button>
+      <button class="tab-button" data-tab="tab-ready">Готовые</button>
+    </div>
+
+    <div id="tab-tasks" class="tab-content active">
+      <h2>Загрузка новых задач</h2>
+      <form id="upload-form" enctype="multipart/form-data">
+          <p>Выберите документ для загрузки:</p>
+          <input type="file" name="document" required>
+          <button type="submit">Загрузить</button>
+      </form>
+      <h3>Список задач в работе:</h3>
+      <ul id="tasks-list">
+        </ul>
+    </div>
+
+    <div id="tab-ready" class="tab-content">
+      <h2>Готовые документы</h2>
+      <p>Здесь находятся завершенные документы, которые можно скачать.</p>
+      <ul id="ready-list">
+        </ul>
+    </div>
+
+    <script src="work.js"></script>
+</body>
+</html>
