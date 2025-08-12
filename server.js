@@ -77,11 +77,11 @@ app.post("/register", async (req, res) => {
 
 
 // СТРАНИЦА ВХОДА (с отображением комментариев)
+// СТРАНИЦА ВХОДА (с исправленной вёрсткой)
 app.get("/login", async (req, res) => {
     try {
         // Получаем все комментарии из базы данных
         const comments = await db.collection("comments").find().sort({ createdAt: -1 }).toArray();
-        // Превращаем комментарии в HTML
         let commentsHtml = comments.map(comment =>
             `<div class="comment"><b>${comment.authorName}:</b> ${comment.text}</div>`
         ).join('');
@@ -89,32 +89,76 @@ app.get("/login", async (req, res) => {
         // Остальная логика без изменений
         const users = await db.collection("users").find().toArray();
         const chessCount = users.filter(u => u.activities?.includes("Шахматы")).length;
-        // ... и т.д.
+        const footballCount = users.filter(u => u.activities?.includes("Футбол")).length;
+        const danceCount = users.filter(u => u.activities?.includes("Танцы")).length;
 
         res.send(`
-            <!DOCTYPE html><html lang="ru"><head><meta charset="UTF-8"><title>Вход и Активности</title>
-            <style>
-                /* ... ваши старые стили ... */
-                .comments-container { background: rgba(0, 0, 0, 0.7); color: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; width: 100%; max-width: 500px; }
-                .comments-container h3 { margin-top: 0; text-align: center; }
-                .comment { background: rgba(255, 255, 255, 0.1); padding: 10px; border-radius: 5px; margin-bottom: 5px; }
-            </style></head><body>
-            
-            <div class="comments-container">
-                <h3>Последние комментарии:</h3>
-                ${commentsHtml.length > 0 ? commentsHtml : "<p>Пока нет комментариев.</p>"}
-            </div>
-
-            <div class="container">
-                <div class="activities-block">
+            <!DOCTYPE html>
+            <html lang="ru">
+            <head>
+                <meta charset="UTF-8"><title>Вход и Активности</title>
+                <style>
+                    body {
+                        font-family: Arial, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh;
+                        background-image: url('/images/background.jpg'); background-size: cover; background-position: center;
+                        background-attachment: fixed; padding: 20px; margin: 0;
+                    }
+                    /* ✅ ОБНОВЛЁННЫЙ КОНТЕЙНЕР-ОБЁРТКА */
+                    .main-wrapper {
+                        display: flex;
+                        gap: 20px; /* Расстояние между блоками */
+                        align-items: flex-start; /* Выравнивание по верху */
+                        flex-wrap: wrap; /* Перенос на новую строку на маленьких экранах */
+                        justify-content: center;
+                    }
+                    .container { width: 100%; max-width: 500px; }
+                    .activities-block { background: rgba(0, 0, 0, 0.7); color: white; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); margin-bottom: 20px; }
+                    .activities-block h2 { margin-top: 0; text-align: center; }
+                    .activity { background-color: #4CAF50; padding: 15px; margin-bottom: 5px; border-radius: 5px; display: flex; justify-content: space-between; }
+                    form { background: rgba(0, 0, 0, 0.7); color: white; padding: 30px; border-radius: 8px; }
+                    form h2 { text-align: center; margin-top: 0; }
+                    input { width: 95%; padding: 12px; margin-bottom: 15px; border-radius: 5px; border: 1px solid #ccc; }
+                    button { width: 100%; padding: 12px; border: none; border-radius: 5px; background-color: #007BFF; color: white; font-size: 16px; cursor: pointer; }
+                    a { color: #6cafff; display: block; text-align: center; margin-top: 15px; }
+                    .special-offer { background-color: #e91e63; justify-content: center; text-align: center; font-weight: bold; font-size: 1.1em; }
+                    /* Стили для блока комментариев */
+                    .comments-container { background: rgba(0, 0, 0, 0.7); color: white; padding: 20px; border-radius: 8px; width: 100%; max-width: 400px; }
+                    .comments-container h3 { margin-top: 0; text-align: center; }
+                    .comment { background: rgba(255, 255, 255, 0.1); padding: 10px; border-radius: 5px; margin-bottom: 5px; word-wrap: break-word; }
+                </style>
+            </head>
+            <body>
+                <div class="main-wrapper">
+                    <div class="comments-container">
+                        <h3>Последние комментарии:</h3>
+                        ${commentsHtml.length > 0 ? commentsHtml : "<p>Пока нет комментариев.</p>"}
                     </div>
-                <form action="/login" method="POST">
-                    </form>
-            </div></body></html>
+
+                    <div class="container">
+                        <div class="activities-block">
+                            <h2>Доступные активности</h2>
+                            <div class="activity"><span>Шахматы</span><span>Участников: ${chessCount}</span></div>
+                            <div class="activity"><span>Футбол</span><span>Участников: ${footballCount}</span></div>
+                            <div class="activity"><span>Танцы</span><span>Участников: ${danceCount}</span></div>
+                            <div class="activity special-offer"><span>Я тебя люблю и хочешь подарю целую вечеринку в Париже! ❤️</span></div>
+                        </div>
+                        <form action="/login" method="POST">
+                            <h2>Вход</h2>
+                            <input type="email" name="email" placeholder="Email" required>
+                            <input type="password" name="password" placeholder="Пароль" required>
+                            <button type="submit">Войти</button>
+                            <a href="/register.html">Нет аккаунта? Зарегистрироваться</a>
+                        </form>
+                    </div>
+                </div>
+            </body>
+            </html>
         `);
     } catch(error) {
+        console.error("Ошибка на странице входа:", error);
         res.status(500).send("Произошла ошибка на сервере.");
-    }});
+    }
+});
 // АВТОРИЗАЦИЯ
 app.post("/login", async (req, res) => {
     try {
