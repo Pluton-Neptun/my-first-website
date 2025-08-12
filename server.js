@@ -75,30 +75,46 @@ app.post("/register", async (req, res) => {
     }
 });
 
-// СТРАНИЦА ВХОДА
+
+// СТРАНИЦА ВХОДА (с отображением комментариев)
 app.get("/login", async (req, res) => {
     try {
+        // Получаем все комментарии из базы данных
+        const comments = await db.collection("comments").find().sort({ createdAt: -1 }).toArray();
+        // Превращаем комментарии в HTML
+        let commentsHtml = comments.map(comment =>
+            `<div class="comment"><b>${comment.authorName}:</b> ${comment.text}</div>`
+        ).join('');
+
+        // Остальная логика без изменений
         const users = await db.collection("users").find().toArray();
         const chessCount = users.filter(u => u.activities?.includes("Шахматы")).length;
-        const footballCount = users.filter(u => u.activities?.includes("Футбол")).length;
-        const danceCount = users.filter(u => u.activities?.includes("Танцы")).length;
+        // ... и т.д.
+
         res.send(`
             <!DOCTYPE html><html lang="ru"><head><meta charset="UTF-8"><title>Вход и Активности</title>
             <style>
-                body { font-family: Arial, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; background-image: url('/images/background.jpg'); background-size: cover; background-position: center; background-attachment: fixed; padding: 20px; margin: 0; flex-direction: column; } .container { width: 100%; max-width: 500px; } .activities-block { background: rgba(0, 0, 0, 0.7); color: white; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); margin-bottom: 20px; } .activities-block h2 { margin-top: 0; text-align: center; } .activity { background-color: #4CAF50; padding: 15px; margin-bottom: 5px; border-radius: 5px; display: flex; justify-content: space-between; } form { background: rgba(0, 0, 0, 0.7); color: white; padding: 30px; border-radius: 8px; } form h2 { text-align: center; margin-top: 0; } input { width: 95%; padding: 12px; margin-bottom: 15px; border-radius: 5px; border: 1px solid #ccc; } button { width: 100%; padding: 12px; border: none; border-radius: 5px; background-color: #007BFF; color: white; font-size: 16px; cursor: pointer; } button:hover { background-color: #0056b3; } a { color: #6cafff; display: block; text-align: center; margin-top: 15px; } .special-offer { background-color: #e91e63; justify-content: center; text-align: center; font-weight: bold; font-size: 1.1em; }
-            </style></head><body><div class="container"><div class="activities-block"><h2>Доступные активности</h2>
-            <div class="activity"><span>Шахматы</span><span>Участников: ${chessCount}</span></div>
-            <div class="activity"><span>Футбол</span><span>Участников: ${footballCount}</span></div>
-            <div class="activity"><span>Танцы</span><span>Участников: ${danceCount}</span></div>
-            <div class="activity special-offer"><span>Я тебя люблю и хочешь подарю целую вечеринку в Париже! ❤️</span></div></div>
-            <form action="/login" method="POST"><h2>Вход</h2><input type="email" name="email" placeholder="Email" required><input type="password" name="password" placeholder="Пароль" required><button type="submit">Войти</button><a href="/register.html">Нет аккаунта? Зарегистрироваться</a></form>
+                /* ... ваши старые стили ... */
+                .comments-container { background: rgba(0, 0, 0, 0.7); color: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; width: 100%; max-width: 500px; }
+                .comments-container h3 { margin-top: 0; text-align: center; }
+                .comment { background: rgba(255, 255, 255, 0.1); padding: 10px; border-radius: 5px; margin-bottom: 5px; }
+            </style></head><body>
+            
+            <div class="comments-container">
+                <h3>Последние комментарии:</h3>
+                ${commentsHtml.length > 0 ? commentsHtml : "<p>Пока нет комментариев.</p>"}
+            </div>
+
+            <div class="container">
+                <div class="activities-block">
+                    </div>
+                <form action="/login" method="POST">
+                    </form>
             </div></body></html>
         `);
     } catch(error) {
         res.status(500).send("Произошла ошибка на сервере.");
-    }
-});
-
+    }});
 // АВТОРИЗАЦИЯ
 app.post("/login", async (req, res) => {
     try {
@@ -115,19 +131,65 @@ app.post("/login", async (req, res) => {
     }
 });
 
-// ПРОФИЛЬ
+
+// ПРОФИЛЬ (с формой для комментариев)
 app.get("/profile", requireLogin, (req, res) => {
     const { name, email, registeredAt } = req.session.user;
     res.send(`
-        <html><head><meta charset="UTF-8"><title>Профиль</title>
-        <style>
-            body { font-family: Arial; padding: 20px; background: url('/images/background.jpg') no-repeat center center fixed; background-size: cover; color: white; text-shadow: 1px 1px 3px black; } .content { background-color: rgba(0,0,0,0.6); padding: 20px; border-radius: 10px; max-width: 500px; margin: 20px auto; } button, a { background-color: #444; color: white; padding: 8px 15px; border: none; border-radius: 5px; text-decoration: none; cursor: pointer; display: inline-block; margin-top: 5px; } button:hover, a:hover { background-color: #666; }
-        </style></head><body><div class="content">
-        <h2>Здравствуйте, ${name}!</h2><p><b>Email:</b> ${email}</p><p><b>Дата регистрации:</b> ${registeredAt}</p>
-        <form action="/logout" method="POST" style="display:inline;"><button type="submit">Выйти</button></form>
-        <br><br><a href="/">На главную</a><a href="/activities">Посмотреть активности</a>
-        </div></body></html>
+        <html>
+        <head>
+            <meta charset="UTF-8"><title>Профиль</title>
+            <style>
+                body { font-family: Arial; padding: 20px; background: url('/images/background.jpg') no-repeat center center fixed; background-size: cover; color: white; text-shadow: 1px 1px 3px black; }
+                .content { background-color: rgba(0,0,0,0.7); padding: 20px; border-radius: 10px; max-width: 500px; margin: 20px auto; }
+                h2, p { margin-bottom: 15px; }
+                button, a { background-color: #444; color: white; padding: 8px 15px; border: none; border-radius: 5px; text-decoration: none; cursor: pointer; display: inline-block; margin-top: 5px; }
+                /* Стили для формы комментария */
+                textarea { width: 95%; padding: 10px; margin-top: 10px; border-radius: 5px; border: 1px solid #ccc; font-family: Arial; }
+                .comment-form button { background-color: #007BFF; width: 100%; margin-top: 10px; }
+            </style>
+        </head>
+        <body>
+            <div class="content">
+                <h2>Здравствуйте, ${name}!</h2>
+                <p><b>Email:</b> ${email}</p>
+                <p><b>Дата регистрации:</b> ${registeredAt}</p>
+                
+                <form action="/post-comment" method="POST" class="comment-form">
+                    <h3>Оставить комментарий (исчезнет через 2 часа)</h3>
+                    <textarea name="commentText" rows="3" placeholder="Напишите что-нибудь..." required></textarea>
+                    <button type="submit">Отправить</button>
+                </form>
+
+                <hr style="margin: 20px 0;">
+                <form action="/logout" method="POST" style="display:inline-block;"><button type="submit">Выйти</button></form>
+                <a href="/">На главную</a>
+                <a href="/activities">Посмотреть активности</a>
+            </div>
+        </body>
+        </html>
     `);
+});
+
+// ✅ НОВЫЙ МАРШРУТ ДЛЯ СОХРАНЕНИЯ КОММЕНТАРИЕВ
+app.post("/post-comment", requireLogin, async (req, res) => {
+    try {
+        const { commentText } = req.body;
+        const commentsCollection = db.collection("comments");
+
+        const newComment = {
+            authorName: req.session.user.name,
+            text: commentText,
+            createdAt: new Date() // Очень важное поле для TTL-индекса!
+        };
+
+        await commentsCollection.insertOne(newComment);
+        res.redirect("/profile"); // Возвращаем пользователя обратно в профиль
+
+    } catch (error) {
+        console.error("Ошибка при сохранении комментария:", error);
+        res.status(500).send("Не удалось сохранить комментарий.");
+    }
 });
 
 // ВЫХОД
