@@ -27,7 +27,7 @@ const storage = multer.diskStorage({
         cb(null, uploadDir);
     },
     filename: function (req, file, cb) {
-                cb(null, Date.now() + '-' + file.originalname);
+        cb(null, Date.now() + '-' + file.originalname);
     }
 });
 const upload = multer({ storage: storage });
@@ -62,6 +62,8 @@ async function connectToDb() {
             if (!process.env.RENDER) {
                 open(`http://localhost:${PORT}`);
             }
+            // ✅ ЗАПУСКАЕМ ПЕРИОДИЧЕСКУЮ ОЧИСТКУ ФАЙЛОВ
+            startFileCleanupJob();
         });
     } catch (error) {
         console.error("Не удалось подключиться к MongoDB", error);
@@ -98,26 +100,35 @@ app.post("/register", async (req, res) => {
 });
 
 
-// СТРАНИЦA ВХОДА (с блоком "Работа")
+// СТРАНИЦА ВХОДА (с блоком "Выполненные задачи")
 app.get("/login", async (req, res) => {
     try {
-        // Получаем комментарии
+        // Комментарии
         const comments = await db.collection("comments").find().sort({ createdAt: -1 }).toArray();
         let commentsHtml = comments.map(comment =>
             `<div class="comment"><b>${comment.authorName}:</b> ${comment.text}</div>`
         ).join('');
 
-        // Получаем данные для активностей
+        // Активности
         const users = await db.collection("users").find().toArray();
         const chessCount = users.filter(u => u.activities?.includes("Шахматы")).length;
         const footballCount = users.filter(u => u.activities?.includes("Футбол")).length;
         const danceCount = users.filter(u => u.activities?.includes("Танцы")).length;
 
-        // ✅ НОВОЕ: Получаем список задач в работе
+        // Задачи в работе
         const tasks = await db.collection('tasks').find().sort({ createdAt: -1 }).toArray();
         let tasksHtml = tasks.map(task => 
             `<div class="work-item"><span>${task.originalName}</span><span class="work-author">Загрузил: ${task.uploadedBy}</span></div>`
         ).join('');
+        
+        // ✅ НОВОЕ: Получаем выполненные задачи и считаем время
+        const readyDocs = await db.collection('ready_documents').find().sort({ completedAt: -1 }).toArray();
+        let completedTasksHtml = readyDocs.map(doc => {
+            const timeDiff = doc.completedAt.getTime() - doc.createdAt.getTime();
+            const timeTaken = formatTime(timeDiff); // Используем хелпер для форматирования времени
+            return `<div class="completed-item">✅ <span>${doc.originalName}</span> <span class="completed-details">(Выполнил: ${doc.uploadedBy} | Время: ${timeTaken})</span></div>`;
+        }).join('');
+
 
         res.send(`
             <!DOCTYPE html>
@@ -132,52 +143,52 @@ app.get("/login", async (req, res) => {
                     }
                     .main-wrapper {
                         display: flex; gap: 20px; align-items: flex-start;
-                        flex-wrap: wrap; justify-content: center; max-width: 1400px;
+                        flex-wrap: wrap; justify-content: center; max-width: 1600px;
                     }
-                    .container { width: 100%; max-width: 450px; }
+                    .container { width: 100%; max-width: 400px; }
                     
-                    /* Общие стили для блоков */
-                    .activities-block, .comments-container, .work-block {
+                    .activities-block, .comments-container, .work-block, .completed-work-block {
                         background: rgba(0, 0, 0, 0.7); color: white; padding: 20px; border-radius: 8px;
-                        box-shadow: 0 0 10px rgba(0,0,0,0.1); margin-bottom: 20px;
+                        box-shadow: 0 0 10px rgba(0,0,0,0.1); margin-bottom: 20px; width: 100%; max-width: 380px;
                     }
-                    .activities-block h2, .comments-container h3, .work-block h2 { margin-top: 0; text-align: center; }
+                    .activities-block h2, .comments-container h3, .work-block h2, .completed-work-block h2 { margin-top: 0; text-align: center; }
 
-                    /* Стили для активностей */
-                    .activity { background-color: #4CAF50; padding: 15px; margin-bottom: 5px; border-radius: 5px; display: flex; justify-content: space-between; }
+                .activity { background-color: #4CAF50; padding: 15px; margin-bottom: 5px; border-radius: 5px; display: flex; justify-content: space-between; }
                     .special-offer { background-color: #e91e63; justify-content: center; text-align: center; font-weight: bold; font-size: 1.1em; }
                     
-                    /* Стили для формы и ссылок */
-                    form { background: rgba(0, 0, 0, 0.7); color: white; padding: 30px; border-radius: 8px; }
+                  form { background: rgba(0, 0, 0, 0.7); color: white; padding: 30px; border-radius: 8px; }
                     form h2 { text-align: center; margin-top: 0; }
                     input { width: 95%; padding: 12px; margin-bottom: 15px; border-radius: 5px; border: 1px solid #ccc; }
                     button { width: 100%; padding: 12px; border: none; border-radius: 5px; background-color: #007BFF; color: white; font-size: 16px; cursor: pointer; }
                     a { color: #6cafff; display: block; text-align: center; margin-top: 15px; }
 
-                    /* Стили для комментариев */
-                    .comments-container { max-width: 400px; }
-                    .comment { background: rgba(255, 255, 255, 0.1); padding: 10px; border-radius: 5px; margin-bottom: 5px; word-wrap: break-word; }
+                  .comment { background: rgba(255, 255, 255, 0.1); padding: 10px; border-radius: 5px; margin-bottom: 5px; word-wrap: break-word; }
 
-                    /* ✅ НОВЫЕ СТИЛИ: для блока "Работа" */
-                    .work-block { max-width: 400px; border-left: 3px solid #ff9800; }
-                    .work-item { 
-                        background-color: rgba(0, 123, 255, 0.3); padding: 15px; margin-bottom: 5px; border-radius: 5px; 
-                        display: flex; justify-content: space-between; align-items: center; word-break: break-all;
-                    }
+                    .work-block { border-left: 3px solid #ff9800; }
+                    .work-item { background-color: rgba(0, 123, 255, 0.3); padding: 15px; margin-bottom: 5px; border-radius: 5px; display: flex; justify-content: space-between; align-items: center; word-break: break-all; }
                     .work-author { font-size: 0.8em; opacity: 0.8; font-style: italic; }
 
+                    /* ✅ НОВЫЕ СТИЛИ: для блока выполненных задач */
+                    .completed-work-block { border-left: 3px solid #28a745; }
+                    .completed-item { background-color: rgba(40, 167, 69, 0.3); padding: 15px; margin-bottom: 5px; border-radius: 5px; word-break: break-all; }
+                    .completed-details { font-size: 0.9em; opacity: 0.9; color: #f0f0f0; margin-left: 10px; }
                 </style>
             </head>
             <body>
                 <div class="main-wrapper">
                     <div class="comments-container">
-                        <h3>Последние комментарии:</h3>
+                        <h3>Последние комментарии</h3>
                         ${commentsHtml.length > 0 ? commentsHtml : "<p>Пока нет комментариев.</p>"}
                     </div>
 
                     <div class="work-block">
                         <h2>Задачи в работе</h2>
-                        ${tasksHtml.length > 0 ? tasksHtml : "<p>В данный момент нет активных задач.</p>"}
+                        ${tasksHtml.length > 0 ? tasksHtml : "<p>Нет активных задач.</p>"}
+                    </div>
+                    
+                    <div class="completed-work-block">
+                        <h2>Недавно выполненные</h2>
+                        ${completedTasksHtml.length > 0 ? completedTasksHtml : "<p>Нет выполненных задач.</p>"}
                     </div>
 
                     <div class="container">
@@ -378,11 +389,11 @@ app.post('/upload', requireLogin, upload.single('document'), async (req, res) =>
         const tasksCollection = db.collection('tasks');
         const newTask = {
             originalName: req.file.originalname,
-            fileName: req.file.filename,
+            fileName: req.file.filename, // Имя файла на диске
             path: req.file.path,
             uploadedBy: req.session.user.name,
             userId: ObjectId.createFromHexString(req.session.user._id),
-            createdAt: new Date()
+            createdAt: new Date() // Важно для TTL индекса
         };
         await tasksCollection.insertOne(newTask);
         res.redirect('/work');
@@ -424,12 +435,13 @@ app.post('/complete-task/:taskId', requireLogin, async (req, res) => {
             return res.status(404).send('Задача не найдена');
         }
 
-      const readyDoc = {
+        const readyDoc = {
             ...task,
-            completedAt: new Date()
+            completedAt: new Date() // Важно для TTL индекса
         };
         await db.collection('ready_documents').insertOne(readyDoc);
-                await db.collection('tasks').deleteOne({ _id: taskId });
+        
+        await db.collection('tasks').deleteOne({ _id: taskId });
         
         res.json({ success: true, message: 'Задача перемещена в готовые' });
 
@@ -449,7 +461,8 @@ app.get('/download/:fileId', requireLogin, async (req, res) => {
             return res.status(404).send('Документ не найден.');
         }
 
-        const filePath = doc.path;        if (fs.existsSync(filePath)) {
+        const filePath = doc.path;
+        if (fs.existsSync(filePath)) {
             res.download(filePath, doc.originalName);
         } else {
              res.status(404).send('Файл не найден на сервере.');
@@ -460,6 +473,70 @@ app.get('/download/:fileId', requireLogin, async (req, res) => {
         res.status(500).send('Ошибка сервера при скачивании файла.');
     }
 });
+
+// --- Вспомогательные функции ---
+
+// ✅ НОВОЕ: Функция для красивого отображения времени
+function formatTime(ms) {
+    let seconds = Math.floor(ms / 1000);
+    let minutes = Math.floor(seconds / 60);
+    let hours = Math.floor(minutes / 60);
+
+    seconds = seconds % 60;
+    minutes = minutes % 60;
+    
+    let result = [];
+    if (hours > 0) result.push(`${hours} ч`);
+    if (minutes > 0) result.push(`${minutes} мин`);
+    if (seconds > 0 || result.length === 0) result.push(`${seconds} сек`);
+    
+    return result.join(' ');
+}
+
+// ✅ НОВОЕ: Функция для очистки старых файлов с диска
+async function cleanupFiles() {
+    try {
+        console.log('Запуск очистки старых файлов...');
+        const tasks = await db.collection('tasks').find({}, { projection: { fileName: 1 } }).toArray();
+        const readyDocs = await db.collection('ready_documents').find({}, { projection: { fileName: 1 } }).toArray();
+        
+        const validFileNames = new Set([
+            ...tasks.map(t => t.fileName),
+            ...readyDocs.map(d => d.fileName)
+        ]);
+        
+        const filesOnDisk = fs.readdirSync(uploadDir);
+        
+        let deletedCount = 0;
+        for (const file of filesOnDisk) {
+            if (!validFileNames.has(file)) {
+                fs.unlink(path.join(uploadDir, file), err => {
+                    if (err) {
+                        console.error(`Ошибка при удалении файла ${file}:`, err);
+                    } else {
+                        deletedCount++;
+                        console.log(`Удален старый файл: ${file}`);
+                    }
+                });
+            }
+        }
+        if (deletedCount > 0) {
+            console.log(`Очистка завершена. Удалено файлов: ${deletedCount}`);
+        } else {
+            console.log('Старых файлов для удаления не найдено.');
+        }
+
+    } catch (error) {
+        console.error('Критическая ошибка в процессе очистки файлов:', error);
+    }
+}
+
+function startFileCleanupJob() {
+    // Запускать очистку каждый час
+    setInterval(cleanupFiles, 3600000); 
+    // Первый запуск через 10 секунд после старта сервера
+    setTimeout(cleanupFiles, 10000);
+}
 
 
 // --- ЗАПУСК ВСЕГО ПРИЛОЖЕНИЯ ---
