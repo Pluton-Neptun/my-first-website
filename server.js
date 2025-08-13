@@ -99,7 +99,7 @@ app.post("/register", async (req, res) => {
 });
 
 
-// СТРАНИЦА ВХОДА
+// СТРАНИЦА ВХОДА (с кликабельными активностями)
 app.get("/login", async (req, res) => {
     try {
         // Комментарии
@@ -167,9 +167,21 @@ app.get("/login", async (req, res) => {
                     .work-item { background-color: rgba(0, 123, 255, 0.3); padding: 15px; margin-bottom: 5px; border-radius: 5px; display: flex; justify-content: space-between; align-items: center; word-break: break-all; }
                     .work-author { font-size: 0.8em; opacity: 0.8; font-style: italic; }
 
-                    .completed-work-block { border-left: 3px solid #28a745; } 
+                    .completed-work-block { border-left: 3px solid #28a745; }
                     .completed-item { background-color: rgba(40, 167, 69, 0.3); padding: 15px; margin-bottom: 5px; border-radius: 5px; word-break: break-all; }
                     .completed-details { font-size: 0.9em; opacity: 0.9; color: #f0f0f0; margin-left: 10px; }
+
+                    /* ✅ ДОБАВЛЕН СТИЛЬ ДЛЯ ССЫЛОК НА АКТИВНОСТИ */
+                    .activity-link {
+                        text-decoration: none; /* Убираем подчеркивание у ссылок */
+                        color: white;
+                        display: block; /* Делаем ссылку блочным элементом */
+                    }
+                    .activity-link .activity:hover {
+                        transform: scale(1.03); /* Небольшой эффект при наведении */
+                        box-shadow: 0 0 10px rgba(255, 255, 255, 0.3);
+                        transition: all 0.2s ease-in-out;
+                    }
                 </style>
             </head>
             <body>
@@ -192,9 +204,17 @@ app.get("/login", async (req, res) => {
                     <div class="container">
                         <div class="activities-block">
                             <h2>Доступные активности</h2>
-                            <div class="activity"><span>Шахматы</span><span>Участников: ${chessCount}</span></div>
-                            <div class="activity"><span>Футбол</span><span>Участников: ${footballCount}</span></div>
-                            <div class="activity"><span>Танцы</span><span>Участников: ${danceCount}</span></div>
+                            
+                            <a href="/activity/Шахматы" target="_blank" class="activity-link">
+                                <div class="activity"><span>Шахматы</span><span>Участников: ${chessCount}</span></div>
+                            </a>
+                            <a href="/activity/Футбол" target="_blank" class="activity-link">
+                                <div class="activity"><span>Футбол</span><span>Участников: ${footballCount}</span></div>
+                            </a>
+                            <a href="/activity/Танцы" target="_blank" class="activity-link">
+                                <div class="activity"><span>Танцы</span><span>Участников: ${danceCount}</span></div>
+                            </a>
+                            
                             <div class="activity special-offer"><span>Я тебя люблю и хочешь подарю целую вечеринку в Париже! ❤️</span></div>
                         </div>
                         <form action="/login" method="POST">
@@ -232,21 +252,32 @@ app.post("/login", async (req, res) => {
 });
 
 
-// ПРОФИЛЬ
-app.get("/profile", requireLogin, (req, res) => {
-    const { name, email, registeredAt } = req.session.user;
+
+// ПРОФИЛЬ (с формой для указания свободного времени)
+app.get("/profile", requireLogin, async (req, res) => {
+    // Находим актуальные данные пользователя, включая его свободное время
+    const user = await db.collection('users').findOne({ _id: ObjectId.createFromHexString(req.session.user._id) });
+    const { name, email, registeredAt } = user;
+    const availability = user.availability || { days: [], time: "" }; // Получаем данные или ставим по умолчанию
+
     res.send(`
         <html>
         <head>
             <meta charset="UTF-8"><title>Профиль</title>
             <style>
                 body { font-family: Arial; padding: 20px; background: url('/images/background.jpg') no-repeat center center fixed; background-size: cover; color: white; text-shadow: 1px 1px 3px black; }
-                .content { background-color: rgba(0,0,0,0.7); padding: 20px; border-radius: 10px; max-width: 500px; margin: 20px auto; }
+                .content { background-color: rgba(0,0,0,0.7); padding: 20px; border-radius: 10px; max-width: 600px; margin: 20px auto; }
                 h2, p { margin-bottom: 15px; }
                 button, a { background-color: #444; color: white; padding: 8px 15px; border: none; border-radius: 5px; text-decoration: none; cursor: pointer; display: inline-block; margin: 5px; }
-                a.work-button { background-color: #ff9800; }
-                textarea { width: 95%; padding: 10px; margin-top: 10px; border-radius: 5px; border: 1px solid #ccc; font-family: Arial; }
-                .comment-form button { background-color: #007BFF; width: 100%; margin-top: 10px; }
+             .comment-form button { background-color: #007BFF; width: 100%; margin-top: 10px; }
+                hr { margin: 25px 0; border-color: #555; }
+                /* Стили для формы доступности */
+                .availability-form h3 { margin-top: 0; }
+                .availability-form .form-group { margin-bottom: 15px; }
+                .availability-form label { display: block; margin-bottom: 5px; }
+                .availability-form input[type="text"] { width: 95%; padding: 10px; border-radius: 5px; border: 1px solid #ccc; }
+                .availability-form .checkbox-group label { display: inline-block; margin-right: 15px; }
+                .availability-form button { background-color: #28a745; width: 100%; }
             </style>
         </head>
         <body>
@@ -255,13 +286,36 @@ app.get("/profile", requireLogin, (req, res) => {
                 <p><b>Email:</b> ${email}</p>
                 <p><b>Дата регистрации:</b> ${registeredAt}</p>
                 
+                <hr>
+                
+                <form action="/update-availability" method="POST" class="availability-form">
+                    <h3>Укажите ваше свободное время</h3>
+                    <div class="form-group checkbox-group">
+                        <label>Дни недели:</label><br>
+                        <input type="checkbox" name="days" value="ПН" ${availability.days.includes('ПН') ? 'checked' : ''}> ПН
+                        <input type="checkbox" name="days" value="ВТ" ${availability.days.includes('ВТ') ? 'checked' : ''}> ВТ
+                        <input type="checkbox" name="days" value="СР" ${availability.days.includes('СР') ? 'checked' : ''}> СР
+                        <input type="checkbox" name="days" value="ЧТ" ${availability.days.includes('ЧТ') ? 'checked' : ''}> ЧТ
+                        <input type="checkbox" name="days" value="ПТ" ${availability.days.includes('ПТ') ? 'checked' : ''}> ПТ
+                        <input type="checkbox" name="days" value="СБ" ${availability.days.includes('СБ') ? 'checked' : ''}> СБ
+                        <input type="checkbox" name="days" value="ВС" ${availability.days.includes('ВС') ? 'checked' : ''}> ВС
+                    </div>
+                    <div class="form-group">
+                        <label for="time">Удобное время (например, 18:00 - 21:00):</label>
+                        <input type="text" id="time" name="time" value="${availability.time}" placeholder="18:00 - 21:00">
+                    </div>
+                    <button type="submit">Сохранить время</button>
+                </form>
+
+                <hr>
+
                 <form action="/post-comment" method="POST" class="comment-form">
-                    <h3>Оставить комментарий (исчезнет через 2 часа)</h3>
+                    <h3>Оставить комментарий</h3>
                     <textarea name="commentText" rows="3" placeholder="Напишите что-нибудь..." required></textarea>
                     <button type="submit">Отправить</button>
                 </form>
 
-                <hr style="margin: 20px 0;">
+                <hr>
                 <form action="/logout" method="POST" style="display:inline-block;"><button type="submit">Выйти</button></form>
                 <a href="/">На главную</a>
                 <a href="/activities">Посмотреть активности</a>
@@ -271,6 +325,107 @@ app.get("/profile", requireLogin, (req, res) => {
         </html>
     `);
 });
+
+// ✅ НОВЫЙ МАРШРУТ: Обновление свободного времени пользователя
+app.post('/update-availability', requireLogin, async (req, res) => {
+    try {
+        const { days, time } = req.body;
+        const userId = ObjectId.createFromHexString(req.session.user._id);
+
+        // Убедимся, что days всегда является массивом
+        const daysArray = Array.isArray(days) ? days : (days ? [days] : []);
+
+        const updateQuery = {
+            $set: {
+                availability: {
+                    days: daysArray,
+                    time: time
+                }
+            }
+        };
+
+        await db.collection('users').updateOne({ _id: userId }, updateQuery);
+        
+        // Обновляем данные в сессии, чтобы они были актуальны
+        req.session.user.availability = { days: daysArray, time: time };
+        
+        res.redirect('/profile');
+
+    } catch (error) {
+        console.error('Ошибка при обновлении времени доступности:', error);
+        res.status(500).send('Не удалось обновить данные.');
+    }
+});
+
+
+// ✅ НОВЫЙ МАРШРУТ: Страница со списком участников активности
+app.get('/activity/:activityName', async (req, res) => {
+    try {
+        const activityName = req.params.activityName;
+        
+        // Находим всех пользователей, у которых в массиве activities есть нужное значение
+        const participants = await db.collection('users').find({
+            activities: activityName
+        }).toArray();
+
+        let participantsHtml = participants.map(p => {
+            const availability = p.availability || { days: [], time: 'не указано' };
+            const daysString = availability.days.join(', ') || 'не указаны';
+            return `
+                <div class="participant-card">
+                    <h3>${p.name}</h3>
+                    <p><strong>Свободные дни:</strong> ${daysString}</p>
+                    <p><strong>Удобное время:</strong> ${availability.time}</p>
+                </div>
+            `;
+        }).join('');
+
+        if (participants.length === 0) {
+            participantsHtml = '<p>На эту активность еще никто не записался.</p>';
+        }
+
+        res.send(`
+            <!DOCTYPE html>
+            <html lang="ru">
+            <head>
+                <meta charset="UTF-8">
+                <title>Участники: ${activityName}</title>
+                <style>
+                    body { 
+                        font-family: Arial, sans-serif; padding: 20px; color: #333; 
+                        background-color: #f4f4f4;
+                    }
+                    .container { max-width: 800px; margin: 0 auto; }
+                    h1 { color: #0056b3; border-bottom: 2px solid #0056b3; padding-bottom: 10px; }
+                    .participant-card {
+                        background-color: white;
+                        border: 1px solid #ddd;
+                        border-radius: 8px;
+                        padding: 20px;
+                        margin-bottom: 15px;
+                        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                    }
+                    .participant-card h3 { margin-top: 0; color: #007BFF; }
+                    a { color: #007BFF; text-decoration: none; font-weight: bold; }
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <h1>Участники активности "${activityName}"</h1>
+                    ${participantsHtml}
+                    <br>
+                    <a href="/login">Вернуться на главную</a>
+                </div>
+            </body>
+            </html>
+        `);
+    } catch (error) {
+        console.error('Ошибка на странице участников:', error);
+        res.status(500).send('Произошла ошибка на сервере.');
+    }
+});
+
+
 
 // СОХРАНЕНИЕ КОММЕНТАРИЕВ
 app.post("/post-comment", requireLogin, async (req, res) => {
