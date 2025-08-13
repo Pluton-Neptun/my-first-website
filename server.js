@@ -62,8 +62,7 @@ async function connectToDb() {
             if (!process.env.RENDER) {
                 open(`http://localhost:${PORT}`);
             }
-            // ✅ ЗАПУСКАЕМ ПЕРИОДИЧЕСКУЮ ОЧИСТКУ ФАЙЛОВ
-            startFileCleanupJob();
+            startFileCleanupJob(); 
         });
     } catch (error) {
         console.error("Не удалось подключиться к MongoDB", error);
@@ -100,7 +99,7 @@ app.post("/register", async (req, res) => {
 });
 
 
-// СТРАНИЦА ВХОДА (с блоком "Выполненные задачи")
+// СТРАНИЦА ВХОДА
 app.get("/login", async (req, res) => {
     try {
         // Комментарии
@@ -121,11 +120,11 @@ app.get("/login", async (req, res) => {
             `<div class="work-item"><span>${task.originalName}</span><span class="work-author">Загрузил: ${task.uploadedBy}</span></div>`
         ).join('');
         
-        // ✅ НОВОЕ: Получаем выполненные задачи и считаем время
+        // Выполненные задачи
         const readyDocs = await db.collection('ready_documents').find().sort({ completedAt: -1 }).toArray();
         let completedTasksHtml = readyDocs.map(doc => {
             const timeDiff = doc.completedAt.getTime() - doc.createdAt.getTime();
-            const timeTaken = formatTime(timeDiff); // Используем хелпер для форматирования времени
+            const timeTaken = formatTime(timeDiff);
             return `<div class="completed-item">✅ <span>${doc.originalName}</span> <span class="completed-details">(Выполнил: ${doc.uploadedBy} | Время: ${timeTaken})</span></div>`;
         }).join('');
 
@@ -153,23 +152,22 @@ app.get("/login", async (req, res) => {
                     }
                     .activities-block h2, .comments-container h3, .work-block h2, .completed-work-block h2 { margin-top: 0; text-align: center; }
 
-                .activity { background-color: #4CAF50; padding: 15px; margin-bottom: 5px; border-radius: 5px; display: flex; justify-content: space-between; }
+                    .activity { background-color: #4CAF50; padding: 15px; margin-bottom: 5px; border-radius: 5px; display: flex; justify-content: space-between; }
                     .special-offer { background-color: #e91e63; justify-content: center; text-align: center; font-weight: bold; font-size: 1.1em; }
                     
-                  form { background: rgba(0, 0, 0, 0.7); color: white; padding: 30px; border-radius: 8px; }
+                    form { background: rgba(0, 0, 0, 0.7); color: white; padding: 30px; border-radius: 8px; }
                     form h2 { text-align: center; margin-top: 0; }
                     input { width: 95%; padding: 12px; margin-bottom: 15px; border-radius: 5px; border: 1px solid #ccc; }
                     button { width: 100%; padding: 12px; border: none; border-radius: 5px; background-color: #007BFF; color: white; font-size: 16px; cursor: pointer; }
                     a { color: #6cafff; display: block; text-align: center; margin-top: 15px; }
 
-                  .comment { background: rgba(255, 255, 255, 0.1); padding: 10px; border-radius: 5px; margin-bottom: 5px; word-wrap: break-word; }
+                    .comment { background: rgba(255, 255, 255, 0.1); padding: 10px; border-radius: 5px; margin-bottom: 5px; word-wrap: break-word; }
 
                     .work-block { border-left: 3px solid #ff9800; }
                     .work-item { background-color: rgba(0, 123, 255, 0.3); padding: 15px; margin-bottom: 5px; border-radius: 5px; display: flex; justify-content: space-between; align-items: center; word-break: break-all; }
                     .work-author { font-size: 0.8em; opacity: 0.8; font-style: italic; }
 
-                    /* ✅ НОВЫЕ СТИЛИ: для блока выполненных задач */
-                    .completed-work-block { border-left: 3px solid #28a745; }
+                    .completed-work-block { border-left: 3px solid #28a745; } 
                     .completed-item { background-color: rgba(40, 167, 69, 0.3); padding: 15px; margin-bottom: 5px; border-radius: 5px; word-break: break-all; }
                     .completed-details { font-size: 0.9em; opacity: 0.9; color: #f0f0f0; margin-left: 10px; }
                 </style>
@@ -380,7 +378,7 @@ app.get('/work', requireLogin, (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'work.html'));
 });
 
-// 2. Загрузка файла (задачи)
+// 2. Загрузка файла как ЗАДАЧИ
 app.post('/upload', requireLogin, upload.single('document'), async (req, res) => {
     try {
         if (!req.file) {
@@ -389,11 +387,11 @@ app.post('/upload', requireLogin, upload.single('document'), async (req, res) =>
         const tasksCollection = db.collection('tasks');
         const newTask = {
             originalName: req.file.originalname,
-            fileName: req.file.filename, // Имя файла на диске
+            fileName: req.file.filename,
             path: req.file.path,
             uploadedBy: req.session.user.name,
             userId: ObjectId.createFromHexString(req.session.user._id),
-            createdAt: new Date() // Важно для TTL индекса
+            createdAt: new Date()
         };
         await tasksCollection.insertOne(newTask);
         res.redirect('/work');
@@ -403,81 +401,114 @@ app.post('/upload', requireLogin, upload.single('document'), async (req, res) =>
     }
 });
 
-// 3. Получение списка задач в работе (для work.js)
+// 3. Загрузка файла сразу как ГОТОВОГО
+app.post('/upload-ready', requireLogin, upload.single('document'), async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).send('Файл не был загружен.');
+        }
+        const readyCollection = db.collection('ready_documents');
+        const newReadyDoc = {
+            originalName: req.file.originalname,
+            fileName: req.file.filename,
+            path: req.file.path,
+            uploadedBy: req.session.user.name,
+            userId: ObjectId.createFromHexString(req.session.user._id),
+            createdAt: new Date(),
+            completedAt: new Date()
+        };
+        await readyCollection.insertOne(newReadyDoc);
+        res.redirect('/work');
+    } catch (error) {
+        console.error('Ошибка при загрузке готового файла:', error);
+        res.status(500).send('Ошибка сервера.');
+    }
+});
+
+
+// 4. Получение списка задач в работе
 app.get('/tasks', requireLogin, async (req, res) => {
     try {
         const tasks = await db.collection('tasks').find().sort({ createdAt: -1 }).toArray();
         res.json(tasks);
     } catch (error) {
-        console.error('Ошибка при получении задач:', error);
-        res.status(500).json({ message: "Ошибка сервера" });
+        res.status(500).json({ message: "Ошибка сервера" }); 
     }
 });
 
-// 4. Получение списка готовых документов (для work.js)
+// 5. Получение списка готовых документов
 app.get('/ready-documents', requireLogin, async (req, res) => {
      try {
         const docs = await db.collection('ready_documents').find().sort({ completedAt: -1 }).toArray();
         res.json(docs);
     } catch (error) {
-        console.error('Ошибка при получении готовых документов:', error);
-        res.status(500).json({ message: "Ошибка сервера" });
+        res.status(500).json({ message: "Ошибка сервера" }); 
     }
 });
 
-// 5. Перемещение задачи в "Готовые"
+// 6. Перемещение задачи в "Готовые"
 app.post('/complete-task/:taskId', requireLogin, async (req, res) => {
     try {
         const taskId = ObjectId.createFromHexString(req.params.taskId);
         const task = await db.collection('tasks').findOne({ _id: taskId });
-
-        if (!task) {
-            return res.status(404).send('Задача не найдена');
-        }
-
-        const readyDoc = {
-            ...task,
-            completedAt: new Date() // Важно для TTL индекса
-        };
+        if (!task) return res.status(404).send('Задача не найдена');
+        
+        const readyDoc = { ...task, completedAt: new Date() };
         await db.collection('ready_documents').insertOne(readyDoc);
+        await db.collection('tasks').deleteOne({ _id: taskId }); 
         
-        await db.collection('tasks').deleteOne({ _id: taskId });
-        
-        res.json({ success: true, message: 'Задача перемещена в готовые' });
-
+        res.json({ success: true });
     } catch (error) {
-         console.error('Ошибка при завершении задачи:', error);
-         res.status(500).json({ success: false, message: 'Ошибка сервера' });
+         res.status(500).json({ success: false, message: 'Ошибка сервера' }); 
     }
 });
 
-// 6. Скачивание готового файла
+// 7. Скачивание готового файла
 app.get('/download/:fileId', requireLogin, async (req, res) => {
     try {
         const fileId = ObjectId.createFromHexString(req.params.fileId);
         const doc = await db.collection('ready_documents').findOne({ _id: fileId });
-        
-        if (!doc) {
-            return res.status(404).send('Документ не найден.');
-        }
+        if (!doc) return res.status(404).send('Документ не найден.');
 
-        const filePath = doc.path;
-        if (fs.existsSync(filePath)) {
-            res.download(filePath, doc.originalName);
+        if (fs.existsSync(doc.path)) {
+            res.download(doc.path, doc.originalName);
         } else {
              res.status(404).send('Файл не найден на сервере.');
         }
-
     } catch (error) {
-        console.error('Ошибка при скачивании файла:', error);
-        res.status(500).send('Ошибка сервера при скачивании файла.');
+        res.status(500).send('Ошибка сервера.');
     }
 });
 
+// 8. Удаление готового документа
+app.delete('/ready-documents/:fileId', requireLogin, async (req, res) => {
+    try {
+        const fileId = ObjectId.createFromHexString(req.params.fileId);
+        const readyCollection = db.collection('ready_documents');
+
+        const docToDelete = await readyCollection.findOne({ _id: fileId });
+        if (!docToDelete) {
+            return res.status(404).json({ message: 'Документ не найден в базе.' });
+        }
+
+        if (fs.existsSync(docToDelete.path)) {
+            fs.unlinkSync(docToDelete.path);
+        }
+
+        await readyCollection.deleteOne({ _id: fileId });
+
+        res.status(200).json({ success: true, message: 'Документ успешно удален.' });
+
+    } catch (error) {
+        console.error('Ошибка при удалении документа:', error);
+        res.status(500).json({ success: false, message: 'Ошибка сервера.' });
+    }
+});
+
+
 // --- Вспомогательные функции ---
 
-// ✅ НОВОЕ: Функция для красивого отображения времени
-function formatTime(ms) {
+function formatTime(ms) { 
     let seconds = Math.floor(ms / 1000);
     let minutes = Math.floor(seconds / 60);
     let hours = Math.floor(minutes / 60);
@@ -488,13 +519,12 @@ function formatTime(ms) {
     let result = [];
     if (hours > 0) result.push(`${hours} ч`);
     if (minutes > 0) result.push(`${minutes} мин`);
-    if (seconds > 0 || result.length === 0) result.push(`${seconds} сек`);
+    if (seconds >= 0 && result.length === 0) result.push(`${seconds} сек`);
     
     return result.join(' ');
 }
 
-// ✅ НОВОЕ: Функция для очистки старых файлов с диска
-async function cleanupFiles() {
+async function cleanupFiles() { 
     try {
         console.log('Запуск очистки старых файлов...');
         const tasks = await db.collection('tasks').find({}, { projection: { fileName: 1 } }).toArray();
@@ -532,10 +562,8 @@ async function cleanupFiles() {
 }
 
 function startFileCleanupJob() {
-    // Запускать очистку каждый час
-    setInterval(cleanupFiles, 3600000); 
-    // Первый запуск через 10 секунд после старта сервера
-    setTimeout(cleanupFiles, 10000);
+    setInterval(cleanupFiles, 3600000);  
+    setTimeout(cleanupFiles, 10000); 
 }
 
 
