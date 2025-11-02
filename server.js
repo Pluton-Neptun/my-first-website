@@ -10,12 +10,53 @@ import { MongoClient, ObjectId } from "mongodb";
 import 'dotenv/config';
 import multer from 'multer';
 import fs from 'fs';
+import { createClient } from 'redis'; // ✅ НОВЫЙ ИМПОРТ REDIS
 
 // --- Инициализация Express ---
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// --- Инициализация Redis ---
+// Подключаемся к Redis, используя REDIS_URL из переменных окружения (для Render)
+const redisClient = createClient({
+    url: process.env.REDIS_URL || 'redis://localhost:6379'
+});
+
+redisClient.on('error', (err) => console.error('Redis Client Error', err));
+
+// --- Вспомогательные функции кэширования ---
+const DEFAULT_EXPIRATION = 3600; // 1 час кэша
+
+async function setCache(key, value, options = { EX: DEFAULT_EXPIRATION }) {
+    if (redisClient.isReady) {
+        await redisClient.set(key, JSON.stringify(value), options);
+    }
+}
+
+async function getCache(key) {
+    if (redisClient.isReady) {
+        const cachedValue = await redisClient.get(key);
+        return cachedValue ? JSON.parse(cachedValue) : null;
+    }
+    return null;
+}
+
+async function clearCache(key) {
+    if (redisClient.isReady) {
+        // Очистка по префиксу: удаляем все ключи, начинающиеся с этого префикса
+        if (key.endsWith('*')) {
+            const keys = await redisClient.keys(key);
+            if (keys.length > 0) {
+                await redisClient.del(keys);
+            }
+        } else {
+            await redisClient.del(key);
+        }
+    }
+}
+
 
 // --- Настройка multer для загрузки файлов ---
 const uploadDir = path.join(__dirname, 'public', 'uploads');
@@ -36,8 +77,20 @@ const upload = multer({ storage: storage });
 // --- Middleware ---
 app.use(cors());
 app.use(bodyParser.urlencoded({ extended: true }));
-app.use(express.static(path.join(__dirname, "public")));
-app.use('/uploads', express.static(uploadDir));
+
+// ✅ НАСТРОЙКА КЭШИРОВАНИЯ: Статические файлы (CSS, JS, Images) на 7 дней (604800 секунд)
+const STATIC_MAX_AGE_MS = 1000 * 60 * 60 * 24 * 7; 
+
+// Применение maxAge к папке public
+app.use(express.static(path.join(__dirname, "public"), {
+  maxAge: STATIC_MAX_AGE_MS
+}));
+
+// Применение maxAge к папке uploads
+app.use('/uploads', express.static(uploadDir, {
+  maxAge: STATIC_MAX_AGE_MS
+}));
+
 app.use(session({
     secret: "my_secret_key",
     resave: false,
@@ -55,6 +108,11 @@ async function connectToDb() {
     try {
         await mongoClient.connect();
         console.log("Успешно подключились к MongoDB");
+        
+        // ✅ ПОДКЛЮЧЕНИЕ К REDIS
+        await redisClient.connect();
+        console.log("Успешно подключились к Redis");
+        
         db = mongoClient.db("my-first-website-db");
         
         app.listen(PORT, () => {
@@ -65,7 +123,7 @@ async function connectToDb() {
             startFileCleanupJob(); 
         });
     } catch (error) {
-        console.error("Не удалось подключиться к MongoDB", error);
+        console.error("Не удалось подключиться к MongoDB или Redis", error);
         process.exit(1);
     }
 }
@@ -77,7 +135,11 @@ const requireLogin = (req, res, next) => {
     else res.redirect("/login");
 };
 
+const LOGIN_PAGE_CACHE_KEY = 'loginPageData'; // Ключ для кэша страницы входа
+
 app.get('/', (req, res) => {
+    // ✅ НАСТРОЙКА КЭШИРОВАНИЯ: Не кэшировать HTML (для актуальности)
+    res.set('Cache-Control', 'public, max-age=0, must-revalidate'); 
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
@@ -92,6 +154,10 @@ app.post("/register", async (req, res) => {
         }
         const newUser = { name, email, password, registeredAt: new Date().toLocaleString(), activities: [] };
         await usersCollection.insertOne(newUser);
+        
+        // ✅ ОЧИСТКА КЭША: Обновлен список пользователей/активностей
+        await clearCache(LOGIN_PAGE_CACHE_KEY); 
+        
         res.send(`<h2>Регистрация прошла успешно!</h2><p>Спасибо, ${name}. Теперь вы можете <a href="/login">войти</a>.</p>`);
     } catch (error) {
         res.status(500).send("Произошла ошибка на сервере.");
@@ -102,27 +168,47 @@ app.post("/register", async (req, res) => {
 // СТРАНИЦА ВХОДА (с кликабельными активностями)
 app.get("/login", async (req, res) => {
     try {
-        // Комментарии
-        const comments = await db.collection("comments").find().sort({ createdAt: -1 }).toArray();
-        let commentsHtml = comments.map(comment =>
+        res.set('Cache-Control', 'public, max-age=0, must-revalidate'); 
+        
+        // ✅ КЭШИРОВАНИЕ: Попытка получить данные из Redis
+        let pageData = await getCache(LOGIN_PAGE_CACHE_KEY);
+
+        if (!pageData) {
+            console.log('Кэш /login пуст, загрузка из MongoDB...');
+            // Комментарии
+            const comments = await db.collection("comments").find().sort({ createdAt: -1 }).toArray();
+            
+            // Активности
+            const users = await db.collection("users").find().toArray();
+            const chessCount = users.filter(u => u.activities?.includes("Шахматы")).length;
+            const footballCount = users.filter(u => u.activities?.includes("Футбол")).length;
+            const danceCount = users.filter(u => u.activities?.includes("Танцы")).length;
+
+            // Задачи в работе
+            const tasks = await db.collection('tasks').find().sort({ createdAt: -1 }).toArray();
+            
+            // Выполненные задачи
+            const readyDocs = await db.collection('ready_documents').find().sort({ completedAt: -1 }).toArray();
+
+            pageData = { comments, chessCount, footballCount, danceCount, tasks, readyDocs };
+            
+            // ✅ КЭШИРОВАНИЕ: Сохранение данных в Redis
+            await setCache(LOGIN_PAGE_CACHE_KEY, pageData);
+            console.log('Данные страницы /login закэшированы.');
+        } else {
+            console.log('Кэш /login найден, использование закэшированных данных.');
+        }
+
+        // --- Формирование HTML из pageData ---
+        let commentsHtml = pageData.comments.map(comment =>
             `<div class="comment"><b>${comment.authorName}:</b> ${comment.text}</div>`
         ).join('');
-
-        // Активности
-        const users = await db.collection("users").find().toArray();
-        const chessCount = users.filter(u => u.activities?.includes("Шахматы")).length;
-        const footballCount = users.filter(u => u.activities?.includes("Футбол")).length;
-        const danceCount = users.filter(u => u.activities?.includes("Танцы")).length;
-
-        // Задачи в работе
-        const tasks = await db.collection('tasks').find().sort({ createdAt: -1 }).toArray();
-        let tasksHtml = tasks.map(task => 
+        
+        let tasksHtml = pageData.tasks.map(task => 
             `<div class="work-item"><span>${task.originalName}</span><span class="work-author">Загрузил: ${task.uploadedBy}</span></div>`
         ).join('');
         
-        // Выполненные задачи
-        const readyDocs = await db.collection('ready_documents').find().sort({ completedAt: -1 }).toArray();
-        let completedTasksHtml = readyDocs.map(doc => {
+        let completedTasksHtml = pageData.readyDocs.map(doc => {
             const timeDiff = doc.completedAt.getTime() - doc.createdAt.getTime();
             const timeTaken = formatTime(timeDiff);
             return `<div class="completed-item">✅ <span>${doc.originalName}</span> <span class="completed-details">(Выполнил: ${doc.uploadedBy} | Время: ${timeTaken})</span></div>`;
@@ -135,6 +221,7 @@ app.get("/login", async (req, res) => {
             <head>
                 <meta charset="UTF-8"><title>Вход и Активности</title>
                 <style>
+                    /* ... (Стили) ... */
                     body {
                         font-family: Arial, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh;
                         background-image: url('/images/background.jpg'); background-size: cover; background-position: center;
@@ -171,14 +258,13 @@ app.get("/login", async (req, res) => {
                     .completed-item { background-color: rgba(40, 167, 69, 0.3); padding: 15px; margin-bottom: 5px; border-radius: 5px; word-break: break-all; }
                     .completed-details { font-size: 0.9em; opacity: 0.9; color: #f0f0f0; margin-left: 10px; }
 
-                    /* ✅ ДОБАВЛЕН СТИЛЬ ДЛЯ ССЫЛОК НА АКТИВНОСТИ */
-                    .activity-link {
-                        text-decoration: none; /* Убираем подчеркивание у ссылок */
+                    .activity-link { 
+                        text-decoration: none; 
                         color: white;
-                        display: block; /* Делаем ссылку блочным элементом */
+                        display: block; 
                     }
                     .activity-link .activity:hover {
-                        transform: scale(1.03); /* Небольшой эффект при наведении */
+                        transform: scale(1.03); 
                         box-shadow: 0 0 10px rgba(255, 255, 255, 0.3);
                         transition: all 0.2s ease-in-out;
                     }
@@ -206,13 +292,13 @@ app.get("/login", async (req, res) => {
                             <h2>Доступные активности</h2>
                             
                             <a href="/activity/Шахматы" target="_blank" class="activity-link">
-                                <div class="activity"><span>Шахматы</span><span>Участников: ${chessCount}</span></div>
+                                <div class="activity"><span>Шахматы</span><span>Участников: ${pageData.chessCount}</span></div>
                             </a>
                             <a href="/activity/Футбол" target="_blank" class="activity-link">
-                                <div class="activity"><span>Футбол</span><span>Участников: ${footballCount}</span></div>
+                                <div class="activity"><span>Футбол</span><span>Участников: ${pageData.footballCount}</span></div>
                             </a>
                             <a href="/activity/Танцы" target="_blank" class="activity-link">
-                                <div class="activity"><span>Танцы</span><span>Участников: ${danceCount}</span></div>
+                                <div class="activity"><span>Танцы</span><span>Участников: ${pageData.danceCount}</span></div>
                             </a>
                             
                             <div class="activity special-offer"><span>Я тебя люблю и хочешь подарю целую вечеринку в Париже! ❤️</span></div>
@@ -255,6 +341,9 @@ app.post("/login", async (req, res) => {
 
 // ПРОФИЛЬ (с формой для указания свободного времени)
 app.get("/profile", requireLogin, async (req, res) => {
+    // ✅ НАСТРОЙКА КЭШИРОВАНИЯ: Не кэшировать HTML (для актуальности)
+    res.set('Cache-Control', 'public, max-age=0, must-revalidate'); 
+    
     // Находим актуальные данные пользователя, включая его свободное время
     const user = await db.collection('users').findOne({ _id: ObjectId.createFromHexString(req.session.user._id) });
     const { name, email, registeredAt } = user;
@@ -265,6 +354,7 @@ app.get("/profile", requireLogin, async (req, res) => {
         <head>
             <meta charset="UTF-8"><title>Профиль</title>
             <style>
+                /* ... (Стили) ... */
                 body { font-family: Arial; padding: 20px; background: url('/images/background.jpg') no-repeat center center fixed; background-size: cover; color: white; text-shadow: 1px 1px 3px black; }
                 .content { background-color: rgba(0,0,0,0.7); padding: 20px; border-radius: 10px; max-width: 600px; margin: 20px auto; }
                 h2, p { margin-bottom: 15px; }
@@ -349,6 +439,9 @@ app.post('/update-availability', requireLogin, async (req, res) => {
         // Обновляем данные в сессии, чтобы они были актуальны
         req.session.user.availability = { days: daysArray, time: time };
         
+        // ✅ ОЧИСТКА КЭША: Обновлен список пользователей/активностей
+        await clearCache(LOGIN_PAGE_CACHE_KEY); 
+        
         res.redirect('/profile');
 
     } catch (error) {
@@ -361,6 +454,9 @@ app.post('/update-availability', requireLogin, async (req, res) => {
 // ✅ НОВЫЙ МАРШРУТ: Страница со списком участников активности
 app.get('/activity/:activityName', async (req, res) => {
     try {
+        // ✅ НАСТРОЙКА КЭШИРОВАНИЯ: Не кэшировать HTML (для актуальности)
+        res.set('Cache-Control', 'public, max-age=0, must-revalidate'); 
+        
         const activityName = req.params.activityName;
         
         // Находим всех пользователей, у которых в массиве activities есть нужное значение
@@ -391,6 +487,7 @@ app.get('/activity/:activityName', async (req, res) => {
                 <meta charset="UTF-8">
                 <title>Участники: ${activityName}</title>
                 <style>
+                    /* ... (Стили) ... */
                     body { 
                         font-family: Arial, sans-serif; padding: 20px; color: #333; 
                         background-color: #f4f4f4;
@@ -438,6 +535,10 @@ app.post("/post-comment", requireLogin, async (req, res) => {
             createdAt: new Date()
         };
         await commentsCollection.insertOne(newComment);
+        
+        // ✅ ОЧИСТКА КЭША: Обновлен список комментариев
+        await clearCache(LOGIN_PAGE_CACHE_KEY); 
+        
         res.redirect("/profile");
     } catch (error) {
         console.error("Ошибка при сохранении комментария:", error);
@@ -457,6 +558,9 @@ app.post("/logout", (req, res) => {
 // СТРАНИЦА АКТИВНОСТЕЙ
 app.get("/activities", requireLogin, async (req, res) => {
     try {
+        // ✅ НАСТРОЙКА КЭШИРОВАНИЯ: Не кэшировать HTML (для актуальности)
+        res.set('Cache-Control', 'public, max-age=0, must-revalidate'); 
+        
         const users = await db.collection("users").find().toArray();
         let userActivities = [];
         if (req.session.user && req.session.user._id) {
@@ -471,6 +575,7 @@ app.get("/activities", requireLogin, async (req, res) => {
         res.send(`
             <!DOCTYPE html><html lang="ru"><head><meta charset="UTF-8"><title>Активности</title>
             <style>
+                /* ... (Стили) ... */
                 body { font-family: Arial, sans-serif; padding: 20px; background-color: #f0f0f0; margin: 0; }
                 .tab-container { max-width: 600px; margin: 20px auto; }
                 .activity-card { padding: 15px; background-color: white; border: 1px solid #ddd; margin-bottom: 10px; border-radius: 8px; }
@@ -517,6 +622,10 @@ app.post("/update-activity", requireLogin, async (req, res) => {
         if (updateQuery) {
             await usersCollection.updateOne({ _id: userId }, updateQuery);
         }
+        
+        // ✅ ОЧИСТКА КЭША: Изменилось количество участников активности
+        await clearCache(LOGIN_PAGE_CACHE_KEY); 
+        
         res.redirect("/activities");
     } catch (error) {
         console.error("Ошибка при обновлении активностей:", error);
@@ -530,6 +639,8 @@ app.post("/update-activity", requireLogin, async (req, res) => {
 
 // 1. Отдать страницу "Работа"
 app.get('/work', requireLogin, (req, res) => {
+    // ✅ НАСТРОЙКА КЭШИРОВАНИЯ: Не кэшировать HTML (для актуальности)
+    res.set('Cache-Control', 'public, max-age=0, must-revalidate'); 
     res.sendFile(path.join(__dirname, 'public', 'work.html'));
 });
 
@@ -549,6 +660,10 @@ app.post('/upload', requireLogin, upload.single('document'), async (req, res) =>
             createdAt: new Date()
         };
         await tasksCollection.insertOne(newTask);
+        
+        // ✅ ОЧИСТКА КЭША: Добавлена новая задача
+        await clearCache(LOGIN_PAGE_CACHE_KEY); 
+        
         res.redirect('/work');
     } catch (error) {
         console.error('Ошибка при загрузке файла:', error);
@@ -573,6 +688,10 @@ app.post('/upload-ready', requireLogin, upload.single('document'), async (req, r
             completedAt: new Date()
         };
         await readyCollection.insertOne(newReadyDoc);
+        
+        // ✅ ОЧИСТКА КЭША: Добавлен готовый документ
+        await clearCache(LOGIN_PAGE_CACHE_KEY); 
+        
         res.redirect('/work');
     } catch (error) {
         console.error('Ошибка при загрузке готового файла:', error);
@@ -611,6 +730,9 @@ app.post('/complete-task/:taskId', requireLogin, async (req, res) => {
         const readyDoc = { ...task, completedAt: new Date() };
         await db.collection('ready_documents').insertOne(readyDoc);
         await db.collection('tasks').deleteOne({ _id: taskId }); 
+        
+        // ✅ ОЧИСТКА КЭША: Изменились списки задач и готовых документов
+        await clearCache(LOGIN_PAGE_CACHE_KEY); 
         
         res.json({ success: true });
     } catch (error) {
@@ -652,6 +774,9 @@ app.delete('/ready-documents/:fileId', requireLogin, async (req, res) => {
 
         await readyCollection.deleteOne({ _id: fileId });
 
+        // ✅ ОЧИСТКА КЭША: Изменился список готовых документов
+        await clearCache(LOGIN_PAGE_CACHE_KEY); 
+        
         res.status(200).json({ success: true, message: 'Документ успешно удален.' });
 
     } catch (error) {
@@ -710,17 +835,16 @@ async function cleanupFiles() {
         } else {
             console.log('Старых файлов для удаления не найдено.');
         }
-
-    } catch (error) {
-        console.error('Критическая ошибка в процессе очистки файлов:', error);
+    } catch (error) { 
+        console.error('Ошибка в процессе очистки файлов:', error);
     }
 }
 
 function startFileCleanupJob() {
-    setInterval(cleanupFiles, 3600000);  
-    setTimeout(cleanupFiles, 10000); 
+    // Запускаем очистку сразу
+    cleanupFiles(); 
+    // Запускаем очистку каждые 24 часа
+    setInterval(cleanupFiles, 1000 * 60 * 60 * 24); 
 }
 
-
-// --- ЗАПУСК ВСЕГО ПРИЛОЖЕНИЯ ---
-connectToDb();
+connectToDb(); 
