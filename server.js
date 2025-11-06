@@ -131,8 +131,13 @@ async function connectToDb() {
 // --- Маршруты (Routes) ---
 
 const requireLogin = (req, res, next) => {
-    if (req.session.user) next();
-    else res.redirect("/login");
+    if (req.session.user) {
+        next();
+    } else {
+        // !!! КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Добавлен 'return' !!!
+        // Это гарантирует, что выполнение маршрута прекратится после редиректа.
+        return res.redirect("/login"); 
+    }
 };
 
 const LOGIN_PAGE_CACHE_KEY = 'loginPageData'; // Ключ для кэша страницы входа
