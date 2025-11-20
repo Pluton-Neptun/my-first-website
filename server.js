@@ -381,7 +381,23 @@ app.get("/profile", requireLogin, async (req, res) => {
                     <hr>
                     
                     <form action="/update-availability" method="POST" class="availability-form">
-                        <h3>Укажите ваше свободное время</h3>
+                        <h3>Укажите ваши данные и время</h3>
+                        
+                        <div class="form-group">
+                            <label for="phone">Номер телефона:</label>
+                            <input type="text" id="phone" name="phone" value="${user.phone || ''}" placeholder="+7 (XXX) XXX-XX-XX">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="city">Город:</label>
+                            <input type="text" id="city" name="city" value="${user.city || ''}" placeholder="Например: Актау">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="country">Страна:</label>
+                            <input type="text" id="country" name="country" value="${user.country || ''}" placeholder="Например: Казахстан">
+                        </div>
+
                         <div class="form-group checkbox-group">
                             <label>Дни недели:</label><br>
                             <input type="checkbox" name="days" value="ПН" ${availability.days.includes('ПН') ? 'checked' : ''}> ПН
@@ -396,7 +412,7 @@ app.get("/profile", requireLogin, async (req, res) => {
                             <label for="time">Удобное время (например, 18:00 - 21:00):</label>
                             <input type="text" id="time" name="time" value="${availability.time}" placeholder="18:00 - 21:00">
                         </div>
-                        <button type="submit">Сохранить время</button>
+                        <button type="submit">Сохранить данные</button>
                     </form>
 
                     <hr>
@@ -422,16 +438,21 @@ app.get("/profile", requireLogin, async (req, res) => {
     }
 });
 
-// Обновление свободного времени пользователя
+// Обновление свободного времени пользователя (И НОВЫХ ПОЛЕЙ)
 app.post('/update-availability', requireLogin, async (req, res) => {
     try {
-        const { days, time } = req.body;
+        // ✅ ДОБАВЛЕНО: Получаем phone, city, country из формы
+        const { days, time, phone, city, country } = req.body;
         const userId = ObjectId.createFromHexString(req.session.user._id);
 
         const daysArray = Array.isArray(days) ? days : (days ? [days] : []); 
 
         const updateQuery = {
             $set: {
+                // ✅ Сохраняем новые поля
+                phone: phone,
+                city: city,
+                country: country,
                 availability: {
                     days: daysArray,
                     time: time
@@ -441,8 +462,12 @@ app.post('/update-availability', requireLogin, async (req, res) => {
 
         await db.collection('users').updateOne({ _id: userId }, updateQuery);
         
+        // Обновляем сессию, чтобы данные были доступны сразу
         req.session.user.availability = { days: daysArray, time: time }; 
-        
+        req.session.user.phone = phone;
+        req.session.user.city = city;
+        req.session.user.country = country;
+
         await clearCache(LOGIN_PAGE_CACHE_KEY);  
         
         res.redirect('/profile');
@@ -468,11 +493,20 @@ app.get('/activity/:activityName', async (req, res) => {
         let participantsHtml = participants.map(p => {
             const availability = p.availability || { days: [], time: 'не указано' };
             const daysString = availability.days.join(', ') || 'не указаны';
+            
+            // ✅ ДОБАВЛЕНО: Извлечение новых полей для отображения
+            const phone = p.phone || 'Не указан';
+            const city = p.city || 'Не указан';
+            const country = p.country || 'Не указана';
+
             return `
                 <div class="participant-card">
                     <h3>${p.name}</h3>
                     <p><strong>Свободные дни:</strong> ${daysString}</p>
                     <p><strong>Удобное время:</strong> ${availability.time}</p>
+                    <p><strong>Телефон:</strong> ${phone}</p>
+                    <p><strong>Город:</strong> ${city}</p>
+                    <p><strong>Страна:</strong> ${country}</p>
                 </div>
             `;
         }).join('');
@@ -709,54 +743,13 @@ app.get('/tasks', requireLogin, async (req, res) => {
 
 // 5. Получение списка готовых документов
 app.get('/ready-documents', requireLogin, async (req, res) => {
-     try {
-         const documents = await db.collection('ready_documents').find().sort({ completedAt: -1 }).toArray();
-         res.json(documents);
-     } catch (error) {
-         console.error('Ошибка при получении /ready-documents:', error);
-         res.status(500).json({ message: "Ошибка сервера" }); 
-     }
-});
-
-// 6. Скачивание файла
-app.get('/download/:filename', requireLogin, (req, res) => {
-    const filename = req.params.filename;
-    const filePath = path.join(uploadDir, filename);
-    
-    if (fs.existsSync(filePath)) { 
-        res.download(filePath, filename, (err) => { 
-            if (err) {
-                console.error("Ошибка при скачивании файла:", err);
-                res.status(500).send("Не удалось скачать файл."); 
-            }
-        });
-    } else {
-        res.status(404).send('Файл не найден.');
+    try {
+        const documents = await db.collection('ready_documents').find().sort({ completedAt: -1 }).toArray();
+        res.json(documents);
+    } catch (error) {
+        console.error('Ошибка при получении /ready-documents:', error);
+        res.status(500).json({ message: "Ошибка сервера" });
     }
 });
 
-
-// ===================================================================
-// ✅ ✅ ✅ ГЛОБАЛЬНЫЙ ОБРАБОТЧИК ОШИБОК 5XX (ДОБАВЛЕН)
-// ===================================================================
-// Этот middleware с 4 аргументами поймает ЛЮБУЮ ошибку,
-// которую не поймал 'try...catch', и не даст серверу упасть.
-app.use((err, req, res, next) => {
-    
-    // 1. Запись ошибки в логи сервера (самое важное)
-    console.error(`\n======================================================`);
-    console.error(`[FATAL UNHANDLED 5XX ERROR] Path: ${req.path}`);
-    console.error(`[Stack Trace]:`, err.stack);
-    console.error(`======================================================\n`);
-
-    // 2. Ответ клиенту, чтобы сервер не "завис"
-    if (res.headersSent) {
-        return next(err);
-    }
-    
-    res.status(500).send('<h1>Внутренняя ошибка сервера.</h1>');
-});
-
-
-// Запуск приложения
-connectToDb(); 
+connectToDb();
