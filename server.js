@@ -69,8 +69,7 @@ function formatTime(ms) {
 }
 
 // УДАЛЕНИЕ НЕНУЖНЫХ ФАЙЛОВ
-function startFileCleanupJob() {
-    // Эта функция будет вызываться при запуске сервера
+function startFileCleanupJob() { 
     console.log("Фоновая задача очистки файлов запущена.");
 }
 
@@ -144,7 +143,7 @@ const requireLogin = (req, res, next) => {
     if (req.session.user) {
         next();
     } else {
-        // ✅ ИСПРАВЛЕНО: 'return' не дает коду выполняться дальше и падать
+        // ✅ ЗАЩИТА: 'return' не дает коду выполняться дальше и падать
         return res.redirect("/login"); 
     }
 };
@@ -178,7 +177,7 @@ app.post("/register", async (req, res) => {
 });
 
 
-// СТРАНИЦА ВХОДА (с кликабельными активностями)
+// СТРАНИЦА ВХОДА
 app.get("/login", async (req, res) => {
     try {
         res.set('Cache-Control', 'public, max-age=0, must-revalidate'); 
@@ -203,7 +202,7 @@ app.get("/login", async (req, res) => {
             console.log('Hit cache [comments_list]'); 
         }
 
-        // --- Формирование HTML из pageData ---
+        // --- Формирование HTML ---
         let commentsHtml = pageData.comments.map(comment =>
             `<div class="comment"><b>${comment.authorName}:</b> ${comment.text}</div>`
         ).join('');
@@ -213,58 +212,43 @@ app.get("/login", async (req, res) => {
         ).join('');
         
         let completedTasksHtml = pageData.readyDocs.map(doc => {
-            // ✅ ИСПРАВЛЕНО: Даты из кэша (JSON) нужно парсить как new Date()
+            // ✅ ЗАЩИТА: Парсим даты из JSON
             const completedAt = new Date(doc.completedAt);
             const createdAt = new Date(doc.createdAt);
             
             const timeDiff = completedAt.getTime() - createdAt.getTime();
-            const timeTaken = formatTime(timeDiff); // Используем глобальную функцию
+            const timeTaken = formatTime(timeDiff);
             return `<div class="completed-item">✅ <span>${doc.originalName}</span> <span class="completed-details">(Выполнил: ${doc.uploadedBy} | Время: ${timeTaken})</span></div>`;
         }).join('');
 
-        // (Весь ваш HTML-код для res.send() ... )
-        res.send(`
+        res.send(` 
             <!DOCTYPE html>
             <html lang="ru">
             <head>
                 <meta charset="UTF-8"><title>Вход и Активности</title>
                 <style>
-                    /* ... (Все ваши стили) ... */
-                    body {
-                        font-family: Arial, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh;
-                        background-image: url('/images/background.jpg'); background-size: cover; background-position: center;
-                        background-attachment: fixed; padding: 20px; margin: 0;
-                    }
-                    .main-wrapper {
-                        display: flex; gap: 20px; align-items: flex-start;
-                        flex-wrap: wrap; justify-content: center; max-width: 1600px;
-                    }
+                    /* ... СТИЛИ (сокращено для краткости, они останутся как были) ... */
+                    body { font-family: Arial, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; background-image: url('/images/background.jpg'); background-size: cover; background-position: center; background-attachment: fixed; padding: 20px; margin: 0; }
+                    .main-wrapper { display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap; justify-content: center; max-width: 1600px; }
                     .container { width: 100%; max-width: 400px; }
-                    .activities-block, .comments-container, .work-block, .completed-work-block { 
-                        background: rgba(0, 0, 0, 0.7); color: white; padding: 20px; border-radius: 8px;
-                        box-shadow: 0 0 10px rgba(0,0,0,0.1); margin-bottom: 20px; width: 100%; max-width: 380px;
-                    }
-                    .activities-block h2, .comments-container h3, .work-block h2, .completed-work-block h2 { margin-top: 0; text-align: center; } 
+                    .activities-block, .comments-container, .work-block, .completed-work-block { background: rgba(0, 0, 0, 0.7); color: white; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); margin-bottom: 20px; width: 100%; max-width: 380px; }
+                    .activities-block h2, .comments-container h3, .work-block h2, .completed-work-block h2 { margin-top: 0; text-align: center; }
                     .activity { background-color: #4CAF50; padding: 15px; margin-bottom: 5px; border-radius: 5px; display: flex; justify-content: space-between; }
                     .special-offer { background-color: #e91e63; justify-content: center; text-align: center; font-weight: bold; font-size: 1.1em; }
-                    form { background: rgba(0, 0, 0, 0.7); color: white; padding: 30px; border-radius: 8px; } 
+                    form { background: rgba(0, 0, 0, 0.7); color: white; padding: 30px; border-radius: 8px; }
                     form h2 { text-align: center; margin-top: 0; }
                     input { width: 95%; padding: 12px; margin-bottom: 15px; border-radius: 5px; border: 1px solid #ccc; }
                     button { width: 100%; padding: 12px; border: none; border-radius: 5px; background-color: #007BFF; color: white; font-size: 16px; cursor: pointer; }
-                    a { color: #6cafff; display: block; text-align: center; margin-top: 15px; } 
+                    a { color: #6cafff; display: block; text-align: center; margin-top: 15px; }
                     .comment { background: rgba(255, 255, 255, 0.1); padding: 10px; border-radius: 5px; margin-bottom: 5px; word-wrap: break-word; }
-                    .work-block { border-left: 3px solid #ff9800; } 
+                    .work-block { border-left: 3px solid #ff9800; }
                     .work-item { background-color: rgba(0, 123, 255, 0.3); padding: 15px; margin-bottom: 5px; border-radius: 5px; display: flex; justify-content: space-between; align-items: center; word-break: break-all; }
                     .work-author { font-size: 0.8em; opacity: 0.8; font-style: italic; }
-                    .completed-work-block { border-left: 3px solid #28a745; }с
+                    .completed-work-block { border-left: 3px solid #28a745; }
                     .completed-item { background-color: rgba(40, 167, 69, 0.3); padding: 15px; margin-bottom: 5px; border-radius: 5px; word-break: break-all; }
                     .completed-details { font-size: 0.9em; opacity: 0.9; color: #f0f0f0; margin-left: 10px; }
                     .activity-link { text-decoration: none; color: white; display: block; }
-                    .activity-link .activity:hover {
-                        transform: scale(1.03); 
-                        box-shadow: 0 0 10px rgba(255, 255, 255, 0.3);
-                        transition: all 0.2s ease-in-out;
-                    }
+                    .activity-link .activity:hover { transform: scale(1.03); box-shadow: 0 0 10px rgba(255, 255, 255, 0.3); transition: all 0.2s ease-in-out; }
                 </style>
             </head>
             <body>
@@ -287,7 +271,7 @@ app.get("/login", async (req, res) => {
                     <div class="container">
                         <div class="activities-block">
                             <h2>Доступные активности</h2>
-                            <a href="/activity/Шахматы" target="_blank" class="activity-link">с
+                            <a href="/activity/Шахматы" target="_blank" class="activity-link">
                                 <div class="activity"><span>Шахматы</span><span>Участников: ${pageData.chessCount}</span></div>
                             </a>
                             <a href="/activity/Футбол" target="_blank" class="activity-link">
@@ -334,8 +318,8 @@ app.post("/login", async (req, res) => {
 });
  
  
-// ПРОФИЛЬ (с формой для указания свободного времени)
-// ✅ ✅ ✅ ИСПРАВЛЕНО: Добавлен 'try...catch' и проверка 'if (!user)'
+// ПРОФИЛЬ
+// ✅ ЗАЩИТА: Добавлен 'try...catch' и проверка 'if (!user)'
 app.get("/profile", requireLogin, async (req, res) => {
     try {
         res.set('Cache-Control', 'public, max-age=0, must-revalidate'); 
@@ -351,13 +335,12 @@ app.get("/profile", requireLogin, async (req, res) => {
         const { name, email, registeredAt } = user;
         const availability = user.availability || { days: [], time: "" };
 
-        // (Весь ваш HTML-код для res.send() ... )
-        res.send(`
+        res.send(` 
             <html>
             <head>
                 <meta charset="UTF-8"><title>Профиль</title>
                 <style>
-                    /* ... (Стили) ... */
+                    /* ... Стили профиля ... */
                     body { font-family: Arial; padding: 20px; background: url('/images/background.jpg') no-repeat center center fixed; background-size: cover; color: white; text-shadow: 1px 1px 3px black; }
                     .content { background-color: rgba(0,0,0,0.7); padding: 20px; border-radius: 10px; max-width: 600px; margin: 20px auto; }
                     h2, p { margin-bottom: 15px; }
@@ -441,15 +424,14 @@ app.get("/profile", requireLogin, async (req, res) => {
 // Обновление свободного времени пользователя (И НОВЫХ ПОЛЕЙ)
 app.post('/update-availability', requireLogin, async (req, res) => {
     try {
-        // ✅ ДОБАВЛЕНО: Получаем phone, city, country из формы
+        // Получаем phone, city, country из формы
         const { days, time, phone, city, country } = req.body;
         const userId = ObjectId.createFromHexString(req.session.user._id);
 
         const daysArray = Array.isArray(days) ? days : (days ? [days] : []); 
 
         const updateQuery = {
-            $set: {
-                // ✅ Сохраняем новые поля
+            $set: { 
                 phone: phone,
                 city: city,
                 country: country,
@@ -494,7 +476,7 @@ app.get('/activity/:activityName', async (req, res) => {
             const availability = p.availability || { days: [], time: 'не указано' };
             const daysString = availability.days.join(', ') || 'не указаны';
             
-            // ✅ ДОБАВЛЕНО: Извлечение новых полей для отображения
+            // Безопасное извлечение полей (если их нет в БД)
             const phone = p.phone || 'Не указан';
             const city = p.city || 'Не указан';
             const country = p.country || 'Не указана';
@@ -515,29 +497,18 @@ app.get('/activity/:activityName', async (req, res) => {
             participantsHtml = '<p>На эту активность еще никто не записался.</p>';
         }
 
-        // (Весь ваш HTML-код для res.send() ... )
-        res.send(`
+        res.send(` 
             <!DOCTYPE html>
             <html lang="ru">
             <head>
                 <meta charset="UTF-8">
                 <title>Участники: ${activityName}</title>
                 <style>
-                    /* ... (Стили) ... */
-                    body { 
-                        font-family: Arial, sans-serif; padding: 20px; color: #333; 
-                        background-color: #f4f4f4;
-                    }
+                    /* ... СТИЛИ ... */
+                    body { font-family: Arial, sans-serif; padding: 20px; color: #333; background-color: #f4f4f4; }
                     .container { max-width: 800px; margin: 0 auto; }
                     h1 { color: #0056b3; border-bottom: 2px solid #0056b3; padding-bottom: 10px; }
-                    .participant-card {
-                        background-color: white;
-                        border: 1px solid #ddd;
-                        border-radius: 8px;
-                        padding: 20px;
-                        margin-bottom: 15px;
-                        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-                    }
+                    .participant-card { background-color: white; border: 1px solid #ddd; border-radius: 8px; padding: 20px; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
                     .participant-card h3 { margin-top: 0; color: #007BFF; }
                     a { color: #007BFF; text-decoration: none; font-weight: bold; }
                 </style>
@@ -605,11 +576,10 @@ app.get("/activities", requireLogin, async (req, res) => {
         const footballCount = users.filter(u => u.activities?.includes("Футбол")).length;
         const danceCount = users.filter(u => u.activities?.includes("Танцы")).length;
         
-        // (Весь ваш HTML-код для res.send() ... )
-        res.send(`
+        res.send(` 
             <!DOCTYPE html><html lang="ru"><head><meta charset="UTF-8"><title>Активности</title>
             <style>
-                /* ... (Стили) ... */
+                /* ... СТИЛИ ... */
                 body { font-family: Arial, sans-serif; padding: 20px; background-color: #f0f0f0; margin: 0; }
                 .tab-container { max-width: 600px; margin: 20px auto; }
                 .activity-card { padding: 15px; background-color: white; border: 1px solid #ddd; margin-bottom: 10px; border-radius: 8px; }
@@ -693,7 +663,7 @@ app.post('/upload', requireLogin, upload.single('document'), async (req, res) =>
         };
         await tasksCollection.insertOne(newTask);
         
-        await clearCache(LOGIN_PAGE_CACHE_KEY);  
+        await clearCache(LOGIN_PAGE_CACHE_KEY); 
         
         res.redirect('/work');
     } catch (error) {
@@ -720,36 +690,69 @@ app.post('/upload-ready', requireLogin, upload.single('document'), async (req, r
         };
         await readyCollection.insertOne(newReadyDoc);
         
-        await clearCache(LOGIN_PAGE_CACHE_KEY);  
+        await clearCache(LOGIN_PAGE_CACHE_KEY); 
         
         res.redirect('/work');
     } catch (error) {
         console.error('Ошибка при загрузке готового файла:', error);
         res.status(500).send('Ошибка сервера.');
     }
-});
-
+}); 
 
 // 4. Получение списка задач в работе
-app.get('/tasks', requireLogin, async (req, res) => {
+app.get('/tasks', requireLogin, async (req, res) => { 
     try {
-        const tasks = await db.collection('tasks').find().sort({ createdAt: -1 }).toArray();
+        const tasks = await db.collection('tasks').find().sort({ createdAt: -1 }).toArray(); 
         res.json(tasks);
     } catch (error) {
-        console.error('Ошибка при получении /tasks:', error);
-        res.status(500).json({ message: "Ошибка сервера" }); 
+        console.error('Ошибка при получении /tasks:', error); 
+        res.status(500).json({ message: "Ошибка сервера" });  
     }
 });
 
 // 5. Получение списка готовых документов
-app.get('/ready-documents', requireLogin, async (req, res) => {
-    try {
-        const documents = await db.collection('ready_documents').find().sort({ completedAt: -1 }).toArray();
-        res.json(documents);
-    } catch (error) {
-        console.error('Ошибка при получении /ready-documents:', error);
-        res.status(500).json({ message: "Ошибка сервера" });
+app.get('/ready-documents', requireLogin, async (req, res) => { 
+     try {
+         const documents = await db.collection('ready_documents').find().sort({ completedAt: -1 }).toArray();   
+         res.json(documents);
+     } catch (error) {
+         console.error('Ошибка при получении /ready-documents:', error);
+         res.status(500).json({ message: "Ошибка сервера" }); 
+     }
+});
+
+// 6. Скачивание файла
+app.get('/download/:filename', requireLogin, (req, res) => {
+    const filename = req.params.filename;
+    const filePath = path.join(uploadDir, filename);
+    
+    if (fs.existsSync(filePath)) {
+        res.download(filePath, filename, (err) => {
+            if (err) {
+                console.error("Ошибка при скачивании файла:", err);
+                if (!res.headersSent) res.status(500).send("Не удалось скачать файл.");
+            }
+        });
+    } else {
+        res.status(404).send('Файл не найден.');
     }
 });
 
+
+// ===================================================================
+// ✅ ✅ ✅ ГЛОБАЛЬНЫЙ ОБРАБОТЧИК ОШИБОК 5XX (КРИТИЧЕСКИ ВАЖНО)
+// ===================================================================
+app.use((err, req, res, next) => {
+    // Запись ошибки в лог
+    console.error(`\n[FATAL UNHANDLED 5XX ERROR] Path: ${req.path}`);
+    console.error(err.stack);
+
+    // Не даем серверу упасть и отправляем ответ 500
+    if (!res.headersSent) {
+        res.status(500).send('<h1>Внутренняя ошибка сервера.</h1>');
+    }
+});
+
+
+// Запуск приложения
 connectToDb();
