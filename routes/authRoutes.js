@@ -5,15 +5,16 @@ import { setCache, getCache, clearCache, LOGIN_PAGE_CACHE_KEY } from '../cacheSe
 
 const __dirname = path.resolve();
 
-// Вспомогательная функция времени
+// --- Helper Function for Time Formatting ---
+// (Taken from your provided server.js)
 function formatTime(ms) {
     const seconds = Math.floor((ms / 1000) % 60);
     const minutes = Math.floor((ms / (1000 * 60)) % 60);
     const hours = Math.floor((ms / (1000 * 60 * 60)));
     let parts = [];
-    if (hours > 0) parts.push(`${hours}ч`);
-    if (minutes > 0) parts.push(`${minutes}м`);
-    if (seconds > 0 || parts.length === 0) parts.push(`${seconds}с`);
+    if (hours > 0) parts.push(`${hours}h`);
+    if (minutes > 0) parts.push(`${minutes}m`);
+    if (seconds > 0 || parts.length === 0) parts.push(`${seconds}s`);
     return parts.join(' ');
 }
 
@@ -25,7 +26,7 @@ const requireLogin = (req, res, next) => {
 export default (db) => {
     const router = express.Router();
 
-    // 1. СТРАНИЦА РЕГИСТРАЦИИ
+    // 1. REGISTRATION PAGE
     router.get('/register.html', (req, res) => res.redirect('/register')); 
     
     router.get('/register', (req, res) => {
@@ -56,6 +57,10 @@ export default (db) => {
                     <input type="text" name="name" placeholder="Имя" required>
                     <input type="email" name="email" placeholder="Email" required>
                     <input type="password" name="password" placeholder="Пароль" required>
+                    
+                    <input type="text" name="city" placeholder="Город (необязательно)">
+                    <input type="text" name="country" placeholder="Страна (необязательно)">
+
                     <div class="consent-group">
                         <input type="checkbox" id="consent" required>
                         <label for="consent">Я согласен с <a href="/privacy-policy" target="_blank">Политикой конфиденциальности</a></label>
@@ -68,19 +73,30 @@ export default (db) => {
         `);
     });
 
-  router.post("/register", async (req, res) => {
+    router.post("/register", async (req, res) => {
         try {
-            const { name, email, password } = req.body;
+            // Include city and country in registration
+            const { name, email, password, city, country } = req.body;
             const existingUser = await db.collection("users").findOne({ email: email });
             if (existingUser) return res.send(`<h2>Ошибка</h2><p>Email ${email} уже зарегистрирован.</p><a href="/register">Назад</a>`);
-            const newUser = { name, email, password, registeredAt: new Date().toLocaleString(), activities: [] };
+            
+            const newUser = { 
+                name, 
+                email, 
+                password, 
+                city: city || "", // Save city
+                country: country || "", // Save country
+                registeredAt: new Date().toLocaleString(), 
+                activities: [] 
+            };
+            
             await db.collection("users").insertOne(newUser);
             await clearCache(LOGIN_PAGE_CACHE_KEY);
             res.send(`<h2>Успешно!</h2><p>Спасибо, ${name}. <a href="/login">Войти</a>.</p>`);
         } catch (error) { console.error(error); res.status(500).send("Ошибка сервера."); }
     });
 
-    // 2. СТРАНИЦА ВХОДА (ГЛАВНАЯ)
+    // 2. LOGIN PAGE (MAIN)
     router.get("/login", async (req, res) => {
         try {
             res.set('Cache-Control', 'public, max-age=0, must-revalidate'); 
@@ -101,10 +117,18 @@ export default (db) => {
             }
 
             let commentsHtml = pageData.comments.map(c => `<div class="comment"><b>${c.authorName}:</b> ${c.text}</div>`).join('');
-            let tasksHtml = pageData.tasks.map(t => `<div class="work-item"><span>${t.originalName}</span><span class="work-author">${t.uploadedBy}</span></div>`).join('');
-            let completedHtml = pageData.readyDocs.map(d => {
-                const time = formatTime(new Date(d.completedAt) - new Date(d.createdAt));
-                return `<div class="completed-item">✅ <span>${d.originalName}</span> <span class="completed-details">(${d.uploadedBy} | ${time})</span></div>`;
+            
+            let tasksHtml = pageData.tasks.map(task => 
+                `<div class="work-item"><span>${task.originalName}</span><span class="work-author">Загрузил: ${task.uploadedBy}</span></div>`
+            ).join('');
+            
+            // Using formatTime logic here
+            let completedHtml = pageData.readyDocs.map(doc => {
+                const completedAt = new Date(doc.completedAt);
+                const createdAt = new Date(doc.createdAt);
+                const timeDiff = completedAt.getTime() - createdAt.getTime();
+                const timeTaken = formatTime(timeDiff);
+                return `<div class="completed-item">✅ <span>${doc.originalName}</span> <span class="completed-details">(${doc.uploadedBy} | ${timeTaken})</span></div>`;
             }).join('');
 
             res.send(` 
@@ -121,9 +145,10 @@ export default (db) => {
                         button { background: #007BFF; color: white; border: none; cursor: pointer; }
                         .comment { background: rgba(255,255,255,0.1); padding: 5px; margin-bottom: 5px; }
                         a { color: #6cafff; display: block; text-align: center; }
-                        /* Стиль для ссылок активностей */
-                        a.activity-link { display: inline-block; text-align: left; margin: 5px 0; font-size: 1.1em; text-decoration: none; border-bottom: 1px dashed #6cafff; }
-                        a.activity-link:hover { color: white; border-bottom-style: solid; }
+                        
+                        /* Styles for Activity Links */
+                        a.activity-link { display: inline-block; text-align: left; margin: 5px 0; font-size: 1.1em; text-decoration: none; border-bottom: 1px dashed #6cafff; color: #fff; }
+                        a.activity-link:hover { color: #6cafff; border-bottom-style: solid; }
                         
                         h2, h3 { text-align: center; margin-top: 0; }
                         .work-item { border-left: 3px solid orange; padding: 5px; background: rgba(255,165,0,0.2); margin-bottom: 5px; }
@@ -159,7 +184,7 @@ export default (db) => {
                          <div class="block">
                             <h3>Выполнено</h3>
                             ${completedHtml || "<p>Нет задач</p>"}
-                       </div>
+                        </div>
                     </div>
                 </body>
                 </html>
@@ -167,7 +192,7 @@ export default (db) => {
         } catch(error) { console.error(error); res.status(500).send("Ошибка."); }
     });
 
-   router.post("/login", async (req, res) => {
+    router.post("/login", async (req, res) => {
         try {
             const { email, password } = req.body;
             const user = await db.collection("users").findOne({ email, password });
@@ -180,7 +205,7 @@ export default (db) => {
         } catch (error) { console.error(error); res.status(500).send("Ошибка."); }
     });
     
-    // 3. ПРОФИЛЬ (Без изменений, но включен для полноты файла)
+    // 3. PROFILE PAGE
     router.get("/profile", requireLogin, async (req, res) => {
         try {
             res.set('Cache-Control', 'public, max-age=0, must-revalidate'); 
@@ -200,25 +225,58 @@ export default (db) => {
                         button { background: #28a745; color: white; border: none; cursor: pointer; }
                         .logout-btn { background: #dc3545; }
                         a { color: #6cafff; display: block; margin-top: 10px; text-align: center; }
+                        
+                        /* Styles for availability form (from your code) */
+                        .availability-form h3 { margin-top: 0; }
+                        .availability-form .form-group { margin-bottom: 15px; }
+                        .availability-form label { display: block; margin-bottom: 5px; }
+                        .checkbox-group label { display: inline-block; margin-right: 15px; }
                     </style>
                 </head>
                 <body>
                     <div class="content">
                         <h2>Привет, ${user.name}!</h2>
-                    <form action="/update-availability" method="POST">
+                        <p><b>Email:</b> ${user.email}</p>
+                        <p><b>Дата регистрации:</b> ${user.registeredAt}</p>
+                        
+                        <hr>
+                        
+                        <form action="/update-availability" method="POST" class="availability-form">
                             <input type="hidden" name="_csrf" value="${res.locals.csrfToken}">
-                            <h3>Настройки</h3>
-                            <input type="text" name="phone" value="${user.phone || ''}" placeholder="Телефон">
-                            <input type="text" name="city" value="${user.city || ''}" placeholder="Город">
-                            <input type="text" name="country" value="${user.country || ''}" placeholder="Страна">
-                            <p>Дни: 
+                            <h3>Укажите ваши данные и время</h3>
+                            
+                            <div class="form-group">
+                                <label for="phone">Номер телефона:</label>
+                                <input type="text" name="phone" value="${user.phone || ''}" placeholder="+7 (XXX) XXX-XX-XX">
+                            </div>
+                            <div class="form-group">
+                                <label for="city">Город:</label>
+                                <input type="text" name="city" value="${user.city || ''}" placeholder="Например: Актау">
+                            </div>
+                            <div class="form-group">
+                                <label for="country">Страна:</label>
+                                <input type="text" name="country" value="${user.country || ''}" placeholder="Например: Казахстан">
+                            </div>
+
+                            <div class="form-group checkbox-group">
+                                <label>Дни недели:</label><br>
                                 <label><input type="checkbox" name="days" value="ПН" ${availability.days.includes('ПН')?'checked':''}>ПН</label>
+                                <label><input type="checkbox" name="days" value="ВТ" ${availability.days.includes('ВТ')?'checked':''}>ВТ</label>
                                 <label><input type="checkbox" name="days" value="СР" ${availability.days.includes('СР')?'checked':''}>СР</label>
+                                <label><input type="checkbox" name="days" value="ЧТ" ${availability.days.includes('ЧТ')?'checked':''}>ЧТ</label>
                                 <label><input type="checkbox" name="days" value="ПТ" ${availability.days.includes('ПТ')?'checked':''}>ПТ</label>
-                            </p>
-                            <input type="text" name="time" value="${availability.time}" placeholder="Время (18:00-20:00)">
-                            <button type="submit">Сохранить</button>
+                                <label><input type="checkbox" name="days" value="СБ" ${availability.days.includes('СБ')?'checked':''}>СБ</label>
+                                <label><input type="checkbox" name="days" value="ВС" ${availability.days.includes('ВС')?'checked':''}>ВС</label>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="time">Удобное время (например, 18:00 - 21:00):</label>
+                                <input type="text" name="time" value="${availability.time}" placeholder="18:00 - 21:00">
+                            </div>
+                            
+                            <button type="submit">Сохранить данные</button>
                         </form>
+
                         <hr>
                         <form action="/post-comment" method="POST">
                             <input type="hidden" name="_csrf" value="${res.locals.csrfToken}">
