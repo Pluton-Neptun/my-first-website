@@ -1,13 +1,11 @@
-// routes/activitiesRoutes.js
-import express from 'express';
-import { ObjectId } from "mongodb";
+import express from 'express'; 
+import { ObjectId } from "mongodb"; 
 import { 
     clearCache, 
     LOGIN_PAGE_CACHE_KEY 
 } from '../cacheService.js';
 
-// Middleware для проверки авторизации (дублируется, но можно передать из server.js, пока оставлю здесь)
-const requireLogin = (req, res, next) => {
+const requireLogin = (req, res, next) => { 
     if (req.session.user) {
         next();
     } else {
@@ -15,14 +13,13 @@ const requireLogin = (req, res, next) => {
     }
 };
 
-// Функция, возвращающая Express Router
-export default (db) => {
+export default (db) => { 
     const router = express.Router();
 
     // Страница со списком участников активности
     router.get('/:activityName', async (req, res) => {
         try {
-            res.set('Cache-Control', 'public, max-age=0, must-revalidate');  
+            res.set('Cache-Control', 'public, max-age=0, must-revalidate'); 
             
             const activityName = req.params.activityName;
             
@@ -33,8 +30,7 @@ export default (db) => {
             let participantsHtml = participants.map(p => {
                 const availability = p.availability || { days: [], time: 'не указано' };
                 const daysString = availability.days.join(', ') || 'не указаны';
-                
-                const phone = p.phone || 'Не указан';
+                 const phone = p.phone || 'Не указан';
                 const city = p.city || 'Не указан';
                 const country = p.country || 'Не указана';
 
@@ -59,8 +55,16 @@ export default (db) => {
                 <html lang="ru">
                 <head>
                     <meta charset="UTF-8">
+                    <script src="/ga.js"></script>
                     <title>Участники: ${activityName}</title>
-                    <style>/* ... СТИЛИ (сокращено) ... */</style>
+                    <style>
+                        body { font-family: Arial, sans-serif; padding: 20px; color: #333; background-color: #f4f4f4; }
+                        .container { max-width: 800px; margin: 0 auto; }
+                        h1 { color: #0056b3; border-bottom: 2px solid #0056b3; padding-bottom: 10px; }
+                        .participant-card { background-color: white; border: 1px solid #ddd; border-radius: 8px; padding: 20px; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+                        .participant-card h3 { margin-top: 0; color: #007BFF; }
+                        a { color: #007BFF; text-decoration: none; font-weight: bold; }
+                    </style>
                 </head>
                 <body>
                     <div class="container">
@@ -81,7 +85,7 @@ export default (db) => {
     // СТРАНИЦА АКТИВНОСТЕЙ
     router.get("/", requireLogin, async (req, res) => {
         try {
-            res.set('Cache-Control', 'public, max-age=0, must-revalidate');  
+            res.set('Cache-Control', 'public, max-age=0, must-revalidate'); 
             
             const users = await db.collection("users").find().toArray();
             let userActivities = [];
@@ -97,7 +101,15 @@ export default (db) => {
             
             res.send(` 
                 <!DOCTYPE html><html lang="ru"><head><meta charset="UTF-8"><title>Активности</title>
-                <style>/* ... СТИЛИ (сокращено) ... */</style></head><body>
+                <style>
+                    body { font-family: Arial, sans-serif; padding: 20px; background-color: #f0f0f0; margin: 0; }
+                    .tab-container { max-width: 600px; margin: 20px auto; }
+                    .activity-card { padding: 15px; background-color: white; border: 1px solid #ddd; margin-bottom: 10px; border-radius: 8px; }
+                    .activity-header { display: flex; justify-content: space-between; align-items: center; font-size: 1.2em; font-weight: bold; }
+                    .btn { padding: 8px 12px; border: none; border-radius: 5px; color: white; cursor: pointer; text-decoration: none; font-size: 1em;}
+                    .btn-join { background-color: #28a745; } .btn-leave { background-color: #dc3545; }
+                    a.back-link { color: #007BFF; text-decoration: none; font-weight: bold; }
+                </style></head><body>
                 <div class="tab-container">
                     <h2>Доступные активности</h2>
                     <div class="activity-card"><div class="activity-header"><span>Шахматы</span><span>Участников: ${chessCount}</span></div>
@@ -121,8 +133,7 @@ export default (db) => {
         }
     });
 
-    // ОБРАБОТКА ЗАПИСИ НА АКТИВНОСТИ
-    router.post("/update", requireLogin, async (req, res) => {
+     router.post("/update", requireLogin, async (req, res) => {
         try {
             const { activity, action } = req.body;
             const userId = ObjectId.createFromHexString(req.session.user._id);
@@ -136,9 +147,7 @@ export default (db) => {
             if (updateQuery) {
                 await usersCollection.updateOne({ _id: userId }, updateQuery);
             }
-            
-            await clearCache(LOGIN_PAGE_CACHE_KEY);  
-            
+            await clearCache(LOGIN_PAGE_CACHE_KEY); 
             res.redirect("/activities");
         } catch (error) {
             console.error("Ошибка при обновлении активностей:", error);

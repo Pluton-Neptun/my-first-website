@@ -1,6 +1,5 @@
-// routes/authRoutes.js
-import express from 'express';
-import path from 'path';
+import express from 'express'; 
+import path from 'path'; 
 import { ObjectId } from "mongodb";
 import { 
     setCache, 
@@ -11,7 +10,7 @@ import {
 
 const __dirname = path.resolve();
 
-// Вспомогательная функция для форматирования времени (скопирована из server.js)
+// Вспомогательная функция для форматирования времени
 function formatTime(ms) {
     const seconds = Math.floor((ms / 1000) % 60);
     const minutes = Math.floor((ms / (1000 * 60)) % 60);
@@ -34,8 +33,7 @@ const requireLogin = (req, res, next) => {
     }
 };
 
-// Функция, возвращающая Express Router
-export default (db) => {
+export default (db) => { 
     const router = express.Router();
 
     // РЕГИСТРАЦИЯ
@@ -47,11 +45,11 @@ export default (db) => {
             if (existingUser) {
                 return res.send(`<h2>Ошибка</h2><p>Email ${email} уже зарегистрирован.</p><a href="/">Вернуться</a>`);
             }
-            // 🛑 ВНИМАНИЕ: Здесь нужно внедрить хеширование пароля (bcrypt)!
+            // 🛑 TODO: В будущем добавить хеширование пароля (bcrypt)
             const newUser = { name, email, password, registeredAt: new Date().toLocaleString(), activities: [] };
             await usersCollection.insertOne(newUser);
             
-            await clearCache(LOGIN_PAGE_CACHE_KEY);  
+            await clearCache(LOGIN_PAGE_CACHE_KEY);
             
             res.send(`<h2>Регистрация прошла успешно!</h2><p>Спасибо, ${name}. Теперь вы можете <a href="/login">войти</a>.</p>`);
         } catch (error) {
@@ -60,7 +58,7 @@ export default (db) => {
         }
     });
 
-    // СТРАНИЦА ВХОДА (Она же главная, по сути)
+    // СТРАНИЦА ВХОДА (Она же главная)
     router.get("/login", async (req, res) => {
         try {
             res.set('Cache-Control', 'public, max-age=0, must-revalidate'); 
@@ -69,8 +67,7 @@ export default (db) => {
             
             if (!pageData) {
                 console.log('Miss cache [loginPageData]'); 
-                
-                const comments = await db.collection("comments").find().sort({ createdAt: -1 }).toArray(); 
+                 const comments = await db.collection("comments").find().sort({ createdAt: -1 }).toArray(); 
                 const users = await db.collection("users").find().toArray(); 
                 const chessCount = users.filter(u => u.activities?.includes("Шахматы")).length;
                 const footballCount = users.filter(u => u.activities?.includes("Футбол")).length;
@@ -78,15 +75,13 @@ export default (db) => {
                 const tasks = await db.collection('tasks').find().sort({ createdAt: -1 }).toArray(); 
                 const readyDocs = await db.collection('ready_documents').find().sort({ completedAt: -1 }).toArray(); 
 
-                pageData = { comments, chessCount, footballCount, danceCount, tasks, readyDocs };
-                
+                 pageData = { comments, chessCount, footballCount, danceCount, tasks, readyDocs };
                 await setCache(LOGIN_PAGE_CACHE_KEY, pageData); 
             } else { 
                 console.log('Hit cache [loginPageData]'); 
             }
 
-            // --- Формирование HTML (перенесено из server.js) ---
-            let commentsHtml = pageData.comments.map(comment =>
+             let commentsHtml = pageData.comments.map(comment =>
                 `<div class="comment"><b>${comment.authorName}:</b> ${comment.text}</div>`
             ).join('');
             
@@ -97,8 +92,7 @@ export default (db) => {
             let completedTasksHtml = pageData.readyDocs.map(doc => {
                 const completedAt = new Date(doc.completedAt);
                 const createdAt = new Date(doc.createdAt);
-                
-                const timeDiff = completedAt.getTime() - createdAt.getTime();
+                 const timeDiff = completedAt.getTime() - createdAt.getTime();
                 const timeTaken = formatTime(timeDiff);
                 return `<div class="completed-item">✅ <span>${doc.originalName}</span> <span class="completed-details">(Выполнил: ${doc.uploadedBy} | Время: ${timeTaken})</span></div>`;
             }).join('');
@@ -108,7 +102,29 @@ export default (db) => {
                 <html lang="ru">
                 <head>
                     <meta charset="UTF-8"><title>Вход и Активности</title>
-                    <style>/* ... СТИЛИ (сокращено) ... */</style>
+                    <style>
+                        body { font-family: Arial, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; background-image: url('/images/background.jpg'); background-size: cover; background-position: center; background-attachment: fixed; padding: 20px; margin: 0; }
+                        .main-wrapper { display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap; justify-content: center; max-width: 1600px; }
+                        .container { width: 100%; max-width: 400px; }
+                        .activities-block, .comments-container, .work-block, .completed-work-block { background: rgba(0, 0, 0, 0.7); color: white; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); margin-bottom: 20px; width: 100%; max-width: 380px; }
+                        .activities-block h2, .comments-container h3, .work-block h2, .completed-work-block h2 { margin-top: 0; text-align: center; }
+                        .activity { background-color: #4CAF50; padding: 15px; margin-bottom: 5px; border-radius: 5px; display: flex; justify-content: space-between; }
+                        .special-offer { background-color: #e91e63; justify-content: center; text-align: center; font-weight: bold; font-size: 1.1em; }
+                        form { background: rgba(0, 0, 0, 0.7); color: white; padding: 30px; border-radius: 8px; }
+                        form h2 { text-align: center; margin-top: 0; }
+                        input { width: 95%; padding: 12px; margin-bottom: 15px; border-radius: 5px; border: 1px solid #ccc; }
+                        button { width: 100%; padding: 12px; border: none; border-radius: 5px; background-color: #007BFF; color: white; font-size: 16px; cursor: pointer; }
+                        a { color: #6cafff; display: block; text-align: center; margin-top: 15px; }
+                        .comment { background: rgba(255, 255, 255, 0.1); padding: 10px; border-radius: 5px; margin-bottom: 5px; word-wrap: break-word; }
+                        .work-block { border-left: 3px solid #ff9800; }
+                        .work-item { background-color: rgba(0, 123, 255, 0.3); padding: 15px; margin-bottom: 5px; border-radius: 5px; display: flex; justify-content: space-between; align-items: center; word-break: break-all; }
+                        .work-author { font-size: 0.8em; opacity: 0.8; font-style: italic; }
+                        .completed-work-block { border-left: 3px solid #28a745; }
+                        .completed-item { background-color: rgba(40, 167, 69, 0.3); padding: 15px; margin-bottom: 5px; border-radius: 5px; word-break: break-all; }
+                        .completed-details { font-size: 0.9em; opacity: 0.9; color: #f0f0f0; margin-left: 10px; }
+                        .activity-link { text-decoration: none; color: white; display: block; }
+                        .activity-link .activity:hover { transform: scale(1.03); box-shadow: 0 0 10px rgba(255, 255, 255, 0.3); transition: all 0.2s ease-in-out; }
+                    </style>
                 </head>
                 <body>
                     <div class="main-wrapper">
@@ -163,7 +179,7 @@ export default (db) => {
     router.post("/login", async (req, res) => {
         try {
             const { email, password } = req.body;
-            // 🛑 ВНИМАНИЕ: Здесь нужно использовать сравнение хеша (bcrypt.compare)!
+            // 🛑 TODO: В будущем добавить bcrypt.compare
             const user = await db.collection("users").findOne({ email: email, password: password });
             if (user) {
                 req.session.user = user;
@@ -196,34 +212,42 @@ export default (db) => {
                 <html>
                 <head>
                     <meta charset="UTF-8"><title>Профиль</title>
-                    <style>/* ... Стили профиля (сокращено) ... */</style>
+                    <script src="/ga.js"></script>
+                    <style>
+                        body { font-family: Arial; padding: 20px; background: url('/images/background.jpg') no-repeat center center fixed; background-size: cover; color: white; text-shadow: 1px 1px 3px black; }
+                        .content { background-color: rgba(0,0,0,0.7); padding: 20px; border-radius: 10px; max-width: 600px; margin: 20px auto; }
+                        h2, p { margin-bottom: 15px; }
+                        button, a { background-color: #444; color: white; padding: 8px 15px; border: none; border-radius: 5px; text-decoration: none; cursor: pointer; display: inline-block; margin: 5px; }
+                        .comment-form button { background-color: #007BFF; width: 100%; margin-top: 10px; }
+                        hr { margin: 25px 0; border-color: #555; }
+                        .availability-form h3 { margin-top: 0; }
+                        .availability-form .form-group { margin-bottom: 15px; }
+                        .availability-form label { display: block; margin-bottom: 5px; }
+                        .availability-form input[type="text"] { width: 95%; padding: 10px; border-radius: 5px; border: 1px solid #ccc; }
+                        .availability-form .checkbox-group label { display: inline-block; margin-right: 15px; }
+                        .availability-form button { background-color: #28a745; width: 100%; }
+                    </style>
                 </head>
                 <body>
                     <div class="content">
                         <h2>Здравствуйте, ${name}!</h2>
                         <p><b>Email:</b> ${email}</p>
-                        <p><b>Дата регистрации:</b> ${registeredAt}</p>
-                        
+                         <p><b>Дата регистрации:</b> ${registeredAt}</p>
                         <hr>
-                        
-                        <form action="/update-availability" method="POST" class="availability-form">
+                         <form action="/update-availability" method="POST" class="availability-form">
                             <h3>Укажите ваши данные и время</h3>
-                            
-                            <div class="form-group">
+                             <div class="form-group">
                                 <label for="phone">Номер телефона:</label>
                                 <input type="text" id="phone" name="phone" value="${user.phone || ''}" placeholder="+7 (XXX) XXX-XX-XX">
-                            </div>
-                            
+                            </div> 
                             <div class="form-group">
                                 <label for="city">Город:</label>
                                 <input type="text" id="city" name="city" value="${user.city || ''}" placeholder="Например: Актау">
-                            </div>
-
+                            </div> 
                             <div class="form-group">
                                 <label for="country">Страна:</label>
                                 <input type="text" id="country" name="country" value="${user.country || ''}" placeholder="Например: Казахстан">
-                            </div>
-
+                            </div> 
                             <div class="form-group checkbox-group">
                                 <label>Дни недели:</label><br>
                                 <input type="checkbox" name="days" value="ПН" ${availability.days.includes('ПН') ? 'checked' : ''}> ПН
@@ -240,16 +264,13 @@ export default (db) => {
                             </div>
                             <button type="submit">Сохранить данные</button>
                         </form>
-
-                        <hr>
-
+                        <hr> 
                         <form action="/post-comment" method="POST" class="comment-form">
                             <h3>Оставить комментарий</h3>
                             <textarea name="commentText" rows="3" placeholder="Напишите что-нибудь..." required></textarea>
                             <button type="submit">Отправить</button>
                         </form>
-
-                        <hr>
+                        <hr> 
                         <form action="/logout" method="POST" style="display:inline-block;"><button type="submit">Выйти</button></form>
                         <a href="/">На главную</a>
                         <a href="/activities">Посмотреть активности</a>
@@ -277,10 +298,7 @@ export default (db) => {
                     phone: phone,
                     city: city,
                     country: country,
-                    availability: {
-                        days: daysArray,
-                        time: time
-                    }
+                    availability: { days: daysArray, time: time }
                 }
             };
 
@@ -291,7 +309,7 @@ export default (db) => {
             req.session.user.city = city;
             req.session.user.country = country;
 
-            await clearCache(LOGIN_PAGE_CACHE_KEY);  
+            await clearCache(LOGIN_PAGE_CACHE_KEY); 
             
             res.redirect('/profile');
 
@@ -312,9 +330,7 @@ export default (db) => {
                 createdAt: new Date()
             };
             await commentsCollection.insertOne(newComment);
-            
-            await clearCache(LOGIN_PAGE_CACHE_KEY);  
-            
+            await clearCache(LOGIN_PAGE_CACHE_KEY);
             res.redirect("/profile");
         } catch (error) {
             console.error("Ошибка при сохранении комментария:", error);

@@ -22,7 +22,7 @@ import workRoutes from './routes/workRoutes.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const app = express();
-const PORT = process.env.PORT || 3000; 
+const PORT = process.env.PORT || 3000;
 
 // --- Настройка multer для загрузки файлов ---
 const uploadDir = path.join(__dirname, 'public', 'uploads');
@@ -83,7 +83,7 @@ async function connectToDb() {
         app.get('/', (req, res) => { 
             res.set('Cache-Control', 'public, max-age=0, must-revalidate'); 
             res.sendFile(path.join(__dirname, 'public', 'index.html'));
-        });
+        }); 
         
         // Маршруты авторизации и профиля
         app.use('/', authRoutes(db));
@@ -106,7 +106,7 @@ async function connectToDb() {
         console.error("Не удалось подключиться к MongoDB или Redis", error);
         process.exit(1);
     }
-} 
+}
 
 // ===================================================================
 // ✅ ✅ ✅ ГЛОБАЛЬНЫЙ ОБРАБОТЧИК ОШИБОК 5XX
@@ -124,4 +124,4 @@ app.use((err, req, res, next) => {
 
 
 // Запуск приложения
-connectToDb(); 
+connectToDb();
