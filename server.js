@@ -11,13 +11,13 @@ import { MongoClient, ObjectId } from "mongodb";
 import 'dotenv/config';
 import multer from 'multer';
 import fs from 'fs';
+
 // Импорт сервисов и маршрутов
 import { connectRedis } from './cacheService.js';
 import authRoutes from './routes/authRoutes.js';
 import activitiesRoutes from './routes/activitiesRoutes.js';
 import workRoutes from './routes/workRoutes.js';
-
-
+ 
 // --- Инициализация Express ---
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -48,7 +48,7 @@ function startFileCleanupJob() {
 app.use(cors());
 app.use(bodyParser.urlencoded({ extended: true }));
 
-const STATIC_MAX_AGE_MS = 1000 * 60 * 60 * 24 * 7;  
+const STATIC_MAX_AGE_MS = 1000 * 60 * 60 * 24 * 7;  
 app.use(express.static(path.join(__dirname, "public"), { 
     maxAge: STATIC_MAX_AGE_MS
 }));
@@ -79,20 +79,22 @@ async function connectToDb() {
         db = mongoClient.db("my-first-website-db");
         
         // --- Подключение маршрутов (Router mounting) ---
-        // Главная страница / - перенаправляет на /login
+        
+        // 1. Главная страница / (перенаправляет на index.html)
         app.get('/', (req, res) => { 
             res.set('Cache-Control', 'public, max-age=0, must-revalidate'); 
             res.sendFile(path.join(__dirname, 'public', 'index.html'));
-        }); 
+        });
+
+        // ✅ 2. ДОБАВЛЕННЫЙ МАРШРУТ: Политика конфиденциальности
+        app.get('/privacy-policy', (req, res) => {
+            res.sendFile(path.join(__dirname, 'public', 'privacy-policy.html'));
+        });
         
-        // Маршруты авторизации и профиля
+        // 3. Остальные маршруты (из папки routes)
         app.use('/', authRoutes(db));
-        
-        // Маршруты активностей (Activities)
-        app.use('/activities', activitiesRoutes(db)); 
-        
-        // Маршруты работы (Work)
-        app.use('/work', workRoutes(db, upload)); 
+        app.use('/activities', activitiesRoutes(db));  
+        app.use('/work', workRoutes(db, upload));  
         
         // --- Запуск сервера ---
         app.listen(PORT, () => {
@@ -109,7 +111,7 @@ async function connectToDb() {
 }
 
 // ===================================================================
-// ✅ ✅ ✅ ГЛОБАЛЬНЫЙ ОБРАБОТЧИК ОШИБОК 5XX
+// ✅ ГЛОБАЛЬНЫЙ ОБРАБОТЧИК ОШИБОК 5XX
 // ===================================================================
 app.use((err, req, res, next) => {
     // Запись ошибки в лог
@@ -120,8 +122,7 @@ app.use((err, req, res, next) => {
     if (!res.headersSent) {
         res.status(500).send('<h1>Внутренняя ошибка сервера.</h1>');
     }
-});
-
+}); 
 
 // Запуск приложения
 connectToDb();
