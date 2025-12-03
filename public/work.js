@@ -1,18 +1,20 @@
 document.addEventListener('DOMContentLoaded', () => {
+    // 1. ПОЛУЧАЕМ ТОКЕН ЗАЩИТЫ ИЗ HTML
+    const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+
     const tabs = document.querySelectorAll('.tab-button');
     const contents = document.querySelectorAll('.tab-content');
     const tasksList = document.getElementById('tasks-list');
     const readyList = document.getElementById('ready-list');
     const uploadForm = document.getElementById('upload-form');
-    // ✅ НОВАЯ ФОРМА
-    const uploadReadyForm = document.getElementById('upload-ready-form');
+   const uploadReadyForm = document.getElementById('upload-ready-form');
 
     // Переключение вкладок
     tabs.forEach(tab => {
         tab.addEventListener('click', () => {
             tabs.forEach(item => item.classList.remove('active'));
             contents.forEach(item => item.classList.remove('active'));
-          tab.classList.add('active');
+            tab.classList.add('active');
             document.getElementById(tab.dataset.tab).classList.add('active');
         });
     });
@@ -20,7 +22,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // Загрузка и отображение задач
     async function fetchTasks() {
         try {
-            const response = await fetch('/tasks');
+            // ❗ Путь изменен на /work/tasks
+            const response = await fetch('/work/tasks');
             if (!response.ok) throw new Error('Ошибка сети');
             const tasks = await response.json();
             tasksList.innerHTML = '';
@@ -31,20 +34,22 @@ document.addEventListener('DOMContentLoaded', () => {
                     const li = document.createElement('li');
                     li.innerHTML = `
                         <span>${task.originalName} (Загрузил: ${task.uploadedBy})</span>
+                        <a href="/work/download/${task.fileName}" class="btn-style download-btn">Скачать</a>
                         <button class="complete-btn btn-style" data-id="${task._id}">Завершить</button>
                     `;
                     tasksList.appendChild(li);
                 });
             }
         } catch (error) {
-          tasksList.innerHTML = '<li>Не удалось загрузить список задач.</li>';
+            tasksList.innerHTML = '<li>Не удалось загрузить список задач.</li>';
         }
     }
 
     // Загрузка и отображение готовых документов
     async function fetchReadyDocuments() {
         try {
-            const response = await fetch('/ready-documents');
+            // ❗ Путь изменен на /work/ready-documents
+            const response = await fetch('/work/ready-documents');
             if (!response.ok) throw new Error('Ошибка сети');
             const documents = await response.json();
             readyList.innerHTML = '';
@@ -52,12 +57,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 readyList.innerHTML = '<li>Готовых документов нет.</li>';
             } else {
                 documents.forEach(doc => {
-                    const li = document.createElement('li');
-                    // ✅ ДОБАВЛЕНА КНОПКА УДАЛЕНИЯ
+                 const li = document.createElement('li');
                     li.innerHTML = `
                         <span>${doc.originalName} (Выполнил: ${doc.uploadedBy})</span>
                         <div>
-                            <a href="/download/${doc._id}" class="btn-style download-btn" download>Скачать</a>
+                            <a href="/work/download/${doc.fileName}" class="btn-style download-btn" download>Скачать</a>
                             <button class="delete-btn btn-style" data-id="${doc._id}">Удалить</button>
                         </div>
                     `;
@@ -65,7 +69,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             }
         } catch (error) {
-          readyList.innerHTML = '<li>Не удалось загрузить список документов.</li>';
+            readyList.innerHTML = '<li>Не удалось загрузить список документов.</li>';
         }
     }
     
@@ -73,7 +77,9 @@ document.addEventListener('DOMContentLoaded', () => {
     uploadForm.addEventListener('submit', async (e) => {
         e.preventDefault();
         const formData = new FormData(uploadForm);
-        const response = await fetch('/upload', { method: 'POST', body: formData });
+        // Токен уже есть внутри формы (скрытое поле), поэтому заголовки не нужны
+        // ❗ Путь изменен на /work/upload
+        const response = await fetch('/work/upload', { method: 'POST', body: formData });
         if (response.ok) {
             uploadForm.reset();
             fetchTasks();
@@ -82,15 +88,15 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // ✅ НОВЫЙ ОБРАБОТЧИК: для формы "Готовые"
+    // Обработка формы "Готовые"
     uploadReadyForm.addEventListener('submit', async (e) => {
         e.preventDefault();
         const formData = new FormData(uploadReadyForm);
-        // Отправляем на новый маршрут
-        const response = await fetch('/upload-ready', { method: 'POST', body: formData });
+        // ❗ Путь изменен на /work/upload-ready
+        const response = await fetch('/work/upload-ready', { method: 'POST', body: formData });
         if (response.ok) {
             uploadReadyForm.reset();
-            fetchReadyDocuments(); // Обновляем список готовых
+            fetchReadyDocuments(); 
         } else {
             alert('Ошибка при загрузке файла.');
         }
@@ -100,7 +106,14 @@ document.addEventListener('DOMContentLoaded', () => {
     tasksList.addEventListener('click', async (e) => {
         if (e.target.classList.contains('complete-btn')) {
             const taskId = e.target.dataset.id;
-            const response = await fetch(`/complete-task/${taskId}`, { method: 'POST' });
+            // ❗ Путь /work/complete-task/ID
+            // ❗ Добавлен заголовок с токеном
+            const response = await fetch(`/work/complete-task/${taskId}`, { 
+                method: 'POST',
+                headers: {
+                    'x-csrf-token': csrfToken 
+                }
+            });
             if (response.ok) {
                 fetchTasks();
                 fetchReadyDocuments();
@@ -110,14 +123,21 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // ✅ НОВЫЙ ОБРАБОТЧИК: клик по кнопке "Удалить"
+    // Клик по кнопке "Удалить"
     readyList.addEventListener('click', async (e) => {
         if (e.target.classList.contains('delete-btn')) {
             const docId = e.target.dataset.id;
             if (confirm('Вы уверены, что хотите удалить этот документ?')) {
-                const response = await fetch(`/ready-documents/${docId}`, { method: 'DELETE' });
+                // ❗ Путь /work/ready-documents/ID
+                // ❗ Добавлен заголовок с токеном
+                const response = await fetch(`/work/ready-documents/${docId}`, { 
+                    method: 'DELETE',
+                    headers: {
+                        'x-csrf-token': csrfToken 
+                    }
+                });
                 if (response.ok) {
-                    fetchReadyDocuments(); // Обновляем список
+                    fetchReadyDocuments(); 
                 } else {
                     alert('Не удалось удалить документ.');
                 }

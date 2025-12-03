@@ -11,61 +11,72 @@ import { MongoClient, ObjectId } from "mongodb";
 import 'dotenv/config';
 import multer from 'multer';
 import fs from 'fs';
+// 1. Импорт защиты
+import { csrfSync } from "csrf-sync";
 
 // Импорт сервисов и маршрутов
 import { connectRedis } from './cacheService.js';
 import authRoutes from './routes/authRoutes.js';
 import activitiesRoutes from './routes/activitiesRoutes.js';
 import workRoutes from './routes/workRoutes.js';
- 
-// --- Инициализация Express ---
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// --- Настройка multer для загрузки файлов ---
+// --- Настройка multer ---
 const uploadDir = path.join(__dirname, 'public', 'uploads');
 if (!fs.existsSync(uploadDir)){
     fs.mkdirSync(uploadDir, { recursive: true });
 }
 const storage = multer.diskStorage({
-    destination: function (req, file, cb) {
-        cb(null, uploadDir);
-    },
-    filename: function (req, file, cb) {
-        cb(null, Date.now() + '-' + file.originalname);
-    }
+    destination: function (req, file, cb) { cb(null, uploadDir); },
+    filename: function (req, file, cb) { cb(null, Date.now() + '-' + file.originalname); }
 });
 const upload = multer({ storage: storage });
 
-// УДАЛЕНИЕ НЕНУЖНЫХ ФАЙЛОВ (оставлено для целостности)
-function startFileCleanupJob() { 
-    console.log("Фоновая задача очистки файлов запущена.");
-}
+function startFileCleanupJob() { console.log("Фоновая задача очистки файлов запущена."); }
 
-// --- Middleware ---
-app.use(cors());
+app.use(cors()); 
 app.use(bodyParser.urlencoded({ extended: true }));
 
-const STATIC_MAX_AGE_MS = 1000 * 60 * 60 * 24 * 7;  
+// Настройка статики
 app.use(express.static(path.join(__dirname, "public"), { 
-    maxAge: STATIC_MAX_AGE_MS
+    setHeaders: (res, filePath) => {
+        if (filePath.endsWith('.css') || filePath.endsWith('.js')) {
+            res.setHeader('Cache-Control', 'public, max-age=3600');
+        } else {
+            res.setHeader('Cache-Control', 'public, max-age=604800');
+        }
+    }
 }));
-app.use('/uploads', express.static(uploadDir, { 
-    maxAge: STATIC_MAX_AGE_MS
-}));
+app.use('/uploads', express.static(uploadDir, { maxAge: 1000 * 60 * 60 * 24 * 7 }));
 
+// Сессии
 app.use(session({
     secret: "my_secret_key",
     resave: false,
     saveUninitialized: false,
-    store: MongoStore.create({
-        mongoUrl: process.env.DATABASE_URL
-    })
+    store: MongoStore.create({ mongoUrl: process.env.DATABASE_URL })
 }));
 
-// --- Настройка подключения к базе данных ---
+// 2. Настройка CSRF (защита форм)
+const { csrfSynchronisedProtection } = csrfSync({
+    getTokenFromRequest: (req) => {
+        return req.body['_csrf'] || req.headers['x-csrf-token'];
+    }
+});
+
+// Включаем защиту глобально для всех POST запросов
+app.use(csrfSynchronisedProtection);
+
+// Передаем токен во все шаблоны
+app.use((req, res, next) => {
+    res.locals.csrfToken = req.csrfToken();
+    next();
+});
+
 const mongoClient = new MongoClient(process.env.DATABASE_URL);
 let db;
 
@@ -73,56 +84,46 @@ async function connectToDb() {
     try {
         await mongoClient.connect();
         console.log("Успешно подключились к MongoDB");
-        
-        await connectRedis(); // Подключение Redis через отдельный сервис
-        
+        await connectRedis(); 
         db = mongoClient.db("my-first-website-db");
         
-        // --- Подключение маршрутов (Router mounting) ---
-        
-        // 1. Главная страница / (перенаправляет на index.html)
+        // Маршруты
         app.get('/', (req, res) => { 
-            res.set('Cache-Control', 'public, max-age=0, must-revalidate'); 
-            res.sendFile(path.join(__dirname, 'public', 'index.html'));
+            // Перенаправляем на логин, чтобы там сгенерировался токен и HTML
+            res.redirect('/login');
         });
 
-        // ✅ 2. ДОБАВЛЕННЫЙ МАРШРУТ: Политика конфиденциальности
-        app.get('/privacy-policy', (req, res) => {
+         app.get('/privacy-policy', (req, res) => {
             res.sendFile(path.join(__dirname, 'public', 'privacy-policy.html'));
         });
         
-        // 3. Остальные маршруты (из папки routes)
-        app.use('/', authRoutes(db));
-        app.use('/activities', activitiesRoutes(db));  
-        app.use('/work', workRoutes(db, upload));  
+         app.use('/', authRoutes(db));
+        app.use('/activities', activitiesRoutes(db)); 
+        app.use('/work', workRoutes(db, upload)); 
         
-        // --- Запуск сервера ---
-        app.listen(PORT, () => {
+         app.listen(PORT, () => {
             console.log(`Сервер запущен: http://localhost:${PORT}`);
-            if (!process.env.RENDER) {
-                open(`http://localhost:${PORT}`);
-            }
+            if (!process.env.RENDER) open(`http://localhost:${PORT}`);
             startFileCleanupJob(); 
         });
     } catch (error) {
-        console.error("Не удалось подключиться к MongoDB или Redis", error);
+        console.error("Ошибка подключения:", error);
         process.exit(1);
     }
 }
 
-// ===================================================================
-// ✅ ГЛОБАЛЬНЫЙ ОБРАБОТЧИК ОШИБОК 5XX
-// ===================================================================
+// Глобальная обработка ошибок (включая ошибку CSRF)
 app.use((err, req, res, next) => {
-    // Запись ошибки в лог
-    console.error(`\n[FATAL UNHANDLED 5XX ERROR] Path: ${req.path}`);
-    console.error(err.stack);
-
-    // Не даем серверу упасть и отправляем ответ 500
-    if (!res.headersSent) {
-        res.status(500).send('<h1>Внутренняя ошибка сервера.</h1>');
+    if (err.code === 'EBADCSRFTOKEN') {
+        return res.status(403).send(`
+            <h1 style="color:red; text-align:center; margin-top:50px;">Ошибка безопасности (CSRF)</h1>
+            <p style="text-align:center;">Ваша сессия устарела или запрос небезопасен.</p>
+            <p style="text-align:center;"><a href="/">Вернуться на главную</a></p>
+        `);
     }
-}); 
+    console.error(`\n[FATAL ERROR] Path: ${req.path}`);
+    console.error(err.stack);
+    if (!res.headersSent) res.status(500).send('<h1>Внутренняя ошибка сервера.</h1>');
+});
 
-// Запуск приложения
 connectToDb();
