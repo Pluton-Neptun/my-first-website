@@ -158,7 +158,7 @@ app.get('/', (req, res) => {
 app.get('/privacy-policy', (req, res) => {
     // Теперь сервер отправляет файл 'public/privacy.html'
     res.sendFile(path.join(__dirname, 'public', 'privacy.html'));
-}); 
+});
 
 // РЕГИСТРАЦИЯ (ОБНОВЛЕННЫЙ МАРШРУТ)
 app.post("/register", async (req, res) => {
@@ -343,7 +343,7 @@ app.post("/login", async (req, res) => {
  
  
 // ПРОФИЛЬ
-app.get("/profile", requireLogin, async (req, res) => { 
+app.get("/profile", requireLogin, async (req, res) => {
     try {
         res.set('Cache-Control', 'public, max-age=0, must-revalidate'); 
         
@@ -646,4 +646,4 @@ app.post("/update-activity", requireLogin, async (req, res) => {
     }
 });
 
-connectToDb(); 
+connectToDb();

@@ -1,68 +1,67 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <title>Регистрация</title>
+ <meta charset="UTF-8">
+ <title>Регистрация</title>
 
-<!-- Подключение Google Analytics (GA4) -->
-    <script src="/ga.js"></script>
+ <script src="/ga.js"></script>
 
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            margin: 0;
-            background-image: url('/images/background.jpg');
-            background-size: cover;
-            background-position: center;
-            background-attachment: fixed;
-        }
-        form {
-            background: rgba(0, 0, 0, 0.7);
-            padding: 30px;
-            border-radius: 10px;
-            box-shadow: 0 0 15px rgba(0,0,0,0.5);
-            width: 320px;
-        }
-        h2 {
-            color: white;
-            text-align: center;
-            margin-bottom: 20px;
-        }
-        input {
-            width: 95%;
-            padding: 12px;
-            margin-bottom: 15px;
-            border-radius: 5px;
-            border: 1px solid #ccc;
-            background-color: #f4f4f4;
-        }
-        button {
-            width: 100%;
-            padding: 12px;
-            border: none;
-            border-radius: 5px;
-            background-color: #28a745;
-            color: white;
-            font-size: 16px;
-            cursor: pointer;
-            transition: background-color 0.3s;
-        }
+ <style>
+ body {
+ font-family: Arial, sans-serif;
+ display: flex;
+ justify-content: center;
+ align-items: center;
+ height: 100vh;
+ margin: 0;
+ background-image: url('/images/background.jpg');
+ background-size: cover;
+ background-position: center;
+ background-attachment: fixed;
+ }
+ form {
+ background: rgba(0, 0, 0, 0.7);
+ padding: 30px;
+ border-radius: 10px;
+ box-shadow: 0 0 15px rgba(0,0,0,0.5);
+ width: 320px;
+ }
+ h2 {
+ color: white;
+ text-align: center;
+ margin-bottom: 20px;
+ }
+       input {
+ width: 95%;
+ padding: 12px;
+ margin-bottom: 15px;
+ border-radius: 5px;
+ border: 1px solid #ccc;
+ background-color: #f4f4f4;
+ }
+     button {
+ width: 100%;
+ padding: 12px;
+ border: none;
+ border-radius: 5px;
+ background-color: #28a745;
+ color: white;
+ font-size: 16px;
+ cursor: pointer;
+ transition: background-color 0.3s;
+}
         button:hover {
-            background-color: #218838;
-        }
-        a {
-            color: #6cafff;
-            display: block;
-            text-align: center;
-            margin-top: 15px;
-        }
-
+ background-color: #218838;
+  } 
+     a {
+ color: #6cafff;
+ display: block;
+ text-align: center;
+ margin-top: 15px;
+ }
         /* СТИЛЬ ДЛЯ ЧЕКБОКСА СОГЛАСИЯ */
         .consent-group {
+            margin-top: 5px; 
             margin-bottom: 15px; 
             text-align: left; 
             color: white; 
@@ -75,30 +74,29 @@
             margin-top: 0;
         }
         .consent-group input[type="checkbox"] {
-            width: auto; /* Убираем 95% ширины */
+            width: auto; 
             margin-right: 5px;
             vertical-align: middle;
         }
-    </style>
+     </style>
 </head>
 <body>
-    <form action="/register" method="POST">
-        <h2>Регистрация</h2>
-        <input type="text" name="name" placeholder="Имя" required>
-        <input type="email" name="email" placeholder="Email" required>
+    <form action="/register" method="POST">
+         <h2>Регистрация</h2>  
+         <input type="text" name="name" placeholder="Имя" required>
+        <input type="email" name="email" placeholder="Email" required>
+        
+        <input type="password" name="password" placeholder="Пароль" required>
         
-       
-        <input type="password" name="password" placeholder="Пароль" required>
-      
-        <div style="margin-bottom: 15px; text-align: left;">
-    <input type="checkbox" id="consent" name="consent" required>
-    <label for="consent" style="font-size: 0.9em; color: #ccc;">
-        Я согласен с <a href="/privacy-policy" target="_blank" style="color: #6cafff; display: inline; text-align: left;">Политикой конфиденциальности</a>
-    </label>
-</div>
-
-        <button type="submit">Зарегистрироваться</button>
-        <a href="/login">Уже есть аккаунт? Войти</a>
-    </form>
+        <div class="consent-group">
+            <input type="checkbox" id="consent" name="consent" required>
+            <label for="consent">
+                Я ознакомлен и даю **согласие на обработку своих персональных данных** в соответствии с <a href="/privacy-policy" target="_blank">Политикой конфиденциальности</a>.
+            </label>
+        </div>
+        
+        <button type="submit">Зарегистрироваться</button>
+        <a href="/login">Уже есть аккаунт? Войти</a>
+    </form>
 </body>
 </html>
