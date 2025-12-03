@@ -68,7 +68,16 @@
         <input type="text" name="name" placeholder="Имя" required>
         <input type="email" name="email" placeholder="Email" required>
         
+       
         <input type="password" name="password" placeholder="Пароль" required>
+      
+        <div style="margin-bottom: 15px; text-align: left;">
+    <input type="checkbox" id="consent" name="consent" required>
+    <label for="consent" style="font-size: 0.9em; color: #ccc;">
+        Я согласен с <a href="/privacy-policy" target="_blank" style="color: #6cafff; display: inline; text-align: left;">Политикой конфиденциальности</a>
+    </label>
+</div>
+
         <button type="submit">Зарегистрироваться</button>
         <a href="/login">Уже есть аккаунт? Войти</a>
     </form>
