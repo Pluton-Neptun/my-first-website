@@ -16,6 +16,11 @@ function formatTime(ms) {
     return parts.join(' ');
 }
 
+// Функция для проверки, картинка это или нет
+function isImage(filename) {
+    return filename.match(/\.(jpg|jpeg|png|gif|webp)$/i);
+}
+
 const requireLogin = (req, res, next) => {
     if (req.session.user) next();
     else return res.redirect("/login"); 
@@ -98,11 +103,31 @@ export default (db) => {
             }
 
             let commentsHtml = pageData.comments.map(c => `<div class="comment"><b>${c.authorName}:</b> ${c.text}</div>`).join('');
-            let tasksHtml = pageData.tasks.map(t => `<div class="work-item"><span>${t.originalName}</span><span class="work-author">${t.uploadedBy}</span></div>`).join('');
-            let completedHtml = pageData.readyDocs.map(d => {
-                const time = formatTime(new Date(d.completedAt) - new Date(d.createdAt));
-                return `<div class="completed-item">✅ <span>${d.originalName}</span> <span class="completed-details">(${d.uploadedBy} | ${time})</span></div>`;
-            }).join('');
+            
+            // --- ГЕНЕРАЦИЯ ГАЛЕРЕИ ДЛЯ "В РАБОТЕ" ---
+            let tasksHtml = `<div class="gallery-grid">` + pageData.tasks.map(t => {
+                const url = `/uploads/${t.fileName}`;
+                // Если картинка - показываем фото, если нет - иконку
+                const content = isImage(t.fileName) 
+                    ? `<img src="${url}" alt="${t.originalName}">`
+                    : `<div class="file-icon">📄</div>`;
+                
+                return `<a href="${url}" target="_blank" class="gallery-item work-border" title="${t.originalName}">
+                            ${content}
+                        </a>`;
+            }).join('') + `</div>`;
+
+            // --- ГЕНЕРАЦИЯ ГАЛЕРЕИ ДЛЯ "ВЫПОЛНЕНО" ---
+            let completedHtml = `<div class="gallery-grid">` + pageData.readyDocs.map(d => {
+                const url = `/uploads/${d.fileName}`;
+                const content = isImage(d.fileName) 
+                    ? `<img src="${url}" alt="${d.originalName}">`
+                    : `<div class="file-icon">✅</div>`;
+                
+                return `<a href="${url}" target="_blank" class="gallery-item ready-border" title="Выполнил: ${d.uploadedBy}">
+                            ${content}
+                        </a>`;
+            }).join('') + `</div>`;
 
             res.send(` 
                 <!DOCTYPE html>
@@ -117,33 +142,50 @@ export default (db) => {
                         input, button { width: 95%; padding: 10px; margin-bottom: 10px; border-radius: 5px; box-sizing: border-box; }
                         button { background: #007BFF; color: white; border: none; cursor: pointer; width: 100%; font-size: 16px; }
                         
-                        /* ✅ НОВЫЙ СТИЛЬ КНОПОК АКТИВНОСТЕЙ */
-                        a.activity-btn { 
-                            display: block; 
-                            width: 100%; 
-                            padding: 12px; 
-                            margin-bottom: 10px; 
-                          color: white; 
-                            text-align: center; 
-                            text-decoration: none; 
-                            border-radius: 5px; 
-                            box-sizing: border-box;
-                            font-weight: bold;
-                            border: 1px solid rgba(255,255,255,0.2);
-                            transition: 0.3s;
+                        /* СТИЛИ ДЛЯ ГАЛЕРЕИ (ФОТО) */
+                        .gallery-grid {
+                            display: flex;
+                            flex-wrap: wrap;
+                            gap: 8px;
+                            justify-content: flex-start;
                         }
-                        .chess-btn { background-color: #6f42c1; } /* Фиолетовый */
-                        .foot-btn { background-color: #fd7e14; } /* Оранжевый */
-                        .dance-btn { background-color: #e83e8c; } /* Розовый */
-                        
+                        .gallery-item {
+                            width: 85px;  /* Маленький размер */
+                            height: 85px; /* Квадрат */
+                            display: block;
+                            overflow: hidden;
+                            border-radius: 5px;
+                            transition: transform 0.2s;
+                            background: rgba(255,255,255,0.1);
+                            display: flex; justify-content: center; align-items: center; text-decoration: none;
+                        }
+                        .gallery-item img {
+                            width: 100%;
+                            height: 100%;
+                            object-fit: cover; /* Заполняет квадрат, обрезая лишнее */
+                        }
+                        .gallery-item:hover {
+                            transform: scale(1.1); /* Увеличение при наведении */
+                            z-index: 10;
+                            box-shadow: 0 0 10px rgba(255,255,255,0.5);
+                        }
+                        .work-border { border: 2px solid orange; }
+                        .ready-border { border: 2px solid #28a745; }
+                        .file-icon { font-size: 40px; }
+
+                        /* КНОПКИ АКТИВНОСТЕЙ */
+                        a.activity-btn { 
+                            display: block; width: 100%; padding: 12px; margin-bottom: 10px; color: white; text-align: center; text-decoration: none; border-radius: 5px; box-sizing: border-box; font-weight: bold; border: 1px solid rgba(255,255,255,0.2); transition: 0.3s;
+                        }
+                        .chess-btn { background-color: #6f42c1; } 
+                        .foot-btn { background-color: #fd7e14; } 
+                        .dance-btn { background-color: #e83e8c; } 
                         a.activity-btn:hover { transform: scale(1.02); opacity: 0.9; }
                         
                         .comment { background: rgba(255,255,255,0.1); padding: 5px; margin-bottom: 5px; }
                         a.link { color: #6cafff; display: block; text-align: center; margin-top: 10px; }
                         h2, h3 { text-align: center; margin-top: 0; }
-                        .work-item { border-left: 3px solid orange; padding: 5px; background: rgba(255,165,0,0.2); margin-bottom: 5px; }
-                        .completed-item { border-left: 3px solid green; padding: 5px; background: rgba(0,128,0,0.2); margin-bottom: 5px; }
-                    </style>
+                     </style>
                 </head>
                 <body>
                     <div class="main-wrapper">
@@ -168,11 +210,11 @@ export default (db) => {
                             ${commentsHtml || "<p>Пусто</p>"}
                         </div>
                         <div class="block">
-                            <h3>В работе</h3>
+                            <h3>В работе (Галерея)</h3>
                             ${tasksHtml || "<p>Нет задач</p>"}
                         </div>
                          <div class="block">
-                            <h3>Выполнено</h3>
+                            <h3>Выполнено (Галерея)</h3>
                             ${completedHtml || "<p>Нет задач</p>"}
                         </div>
                     </div>
@@ -190,7 +232,7 @@ export default (db) => {
         } catch (error) { console.error(error); res.status(500).send("Ошибка."); }
     });
     
-    // 3. ПРОФИЛЬ (Здесь заполняем Телефон, Город, Страну)
+    // 3. ПРОФИЛЬ
     router.get("/profile", requireLogin, async (req, res) => {
         try {
             res.set('Cache-Control', 'public, max-age=0, must-revalidate'); 
@@ -296,54 +338,25 @@ export default (db) => {
 
     router.post("/logout", (req, res) => {
         req.session.destroy(() => { res.clearCookie('connect.sid'); res.redirect('/'); });
-    });
+    }); 
 
-// --- ДОБАВИТЬ ЭТОТ БЛОК ПЕРЕД return router; ---
-
-    // ПОЛИТИКА КОНФИДЕНЦИАЛЬНОСТИ
+    // ПОЛИТИКА КОНФИДЕНЦИАЛЬНОСТИ 
     router.get('/privacy-policy', (req, res) => {
         res.send(`
             <!DOCTYPE html>
             <html lang="ru">
             <head>
-                <meta charset="UTF-8">
-                <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <title>Политика конфиденциальности</title>
-                <style>
-                    body { font-family: Arial, sans-serif; padding: 20px; line-height: 1.6; background-color: #f4f4f4; color: #333; }
-                    .container { max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
-                    h1 { color: #2c3e50; }
-                    h2 { color: #34495e; margin-top: 20px; }
-                    p { margin-bottom: 15px; }
-                    a.btn { display: inline-block; background-color: #007BFF; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; margin-top: 20px; }
-                    a.btn:hover { background-color: #0056b3; }
-                </style>
+                <meta charset="UTF-8"><title>Политика</title>
+                <style>body{font-family:Arial;padding:20px;max-width:800px;margin:auto;background:#fff;color:#333}</style>
             </head>
             <body>
-                <div class="container">
-                    <h1>Политика конфиденциальности</h1>
-                    <p>Последнее обновление: ${new Date().toLocaleDateString()}</p>
-                    
-                    <h2>1. Сбор информации</h2>
-                    <p>Мы собираем только ту информацию, которую вы предоставляете добровольно при регистрации: Имя, Email, а также данные профиля (Город, Страна, Телефон).</p>
-
-                    <h2>2. Использование информации</h2>
-                    <p>Информация используется для организации доступа к сервисам сайта, включая участие в активностях (Шахматы, Футбол, Танцы) и ведение рабочих задач.</p>
-
-                    <h2>3. Защита данных</h2>
-                    <p>Мы принимаем меры безопасности для защиты ваших данных. Пароли и личная информация хранятся в защищенной базе данных.</p>
-
-                    <h2>4. Передача третьим лицам</h2>
-                    <p>Мы не продаем, не обмениваем и не передаем вашу личную информацию посторонним лицам.</p>
-
-                    <a href="/register" class="btn">Вернуться к регистрации</a>
-                </div>
+                <h1>Политика конфиденциальности</h1>
+                <p>Мы защищаем ваши данные. Мы не передаем их третьим лицам.</p>
+                <a href="/register">Вернуться</a>
             </body>
             </html>
         `);
-    });
-
-
+    }); 
 
     return router;
 };
