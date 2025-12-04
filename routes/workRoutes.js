@@ -14,7 +14,7 @@ const requireLogin = (req, res, next) => {
 export default (db, upload) => {
     const router = express.Router();
     const uploadDir = path.join(__dirname, 'public', 'uploads');
-    
+
     router.get('/', requireLogin, (req, res) => { 
         res.set('Cache-Control', 'public, max-age=0, must-revalidate'); 
         res.send(`
@@ -54,8 +54,7 @@ export default (db, upload) => {
 
                     <div id="tab-tasks" class="tab-content active">
                       <h2>Загрузить новый файл</h2>
-                      <form id="upload-form" action="/work/upload" method="POST" enctype="multipart/form-data">
-                       <input type="hidden" name="_csrf" value="${res.locals.csrfToken}">
+                      <form id="upload-form" enctype="multipart/form-data">
                           <input type="file" name="document" required>
                           <button type="submit">Загрузить</button>
                       </form>
@@ -65,9 +64,8 @@ export default (db, upload) => {
 
                     <div id="tab-ready" class="tab-content">
                       <h2>Загрузить в готовые</h2>
-                       <form id="upload-ready-form" action="/work/upload-ready" method="POST" enctype="multipart/form-data">
-                          <input type="hidden" name="_csrf" value="${res.locals.csrfToken}">
-                      <input type="file" name="document" required>
+                       <form id="upload-ready-form" enctype="multipart/form-data">
+                          <input type="file" name="document" required>
                           <button type="submit">Загрузить</button>
                       </form>
                       <h3 style="margin-top: 30px;">Готовые файлы:</h3>
@@ -81,7 +79,7 @@ export default (db, upload) => {
         `);
     });
 
-  router.post('/upload', requireLogin, upload.single('document'), async (req, res) => {
+    router.post('/upload', requireLogin, upload.single('document'), async (req, res) => {
         try {
             if (!req.file) return res.status(400).send('Нет файла.');
             await db.collection('tasks').insertOne({
@@ -106,7 +104,7 @@ export default (db, upload) => {
         } catch (error) { console.error(error); res.status(500).send('Ошибка.'); }
     }); 
 
- router.get('/tasks', requireLogin, async (req, res) => { 
+    router.get('/tasks', requireLogin, async (req, res) => { 
         try {
             const tasks = await db.collection('tasks').find().sort({ createdAt: -1 }).toArray(); 
             res.json(tasks);

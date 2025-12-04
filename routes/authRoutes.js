@@ -5,7 +5,7 @@ import { setCache, getCache, clearCache, LOGIN_PAGE_CACHE_KEY } from '../cacheSe
 
 const __dirname = path.resolve();
 
-function formatTime(ms) { 
+function formatTime(ms) {
     const seconds = Math.floor((ms / 1000) % 60);
     const minutes = Math.floor((ms / (1000 * 60)) % 60);
     const hours = Math.floor((ms / (1000 * 60 * 60)));
@@ -54,7 +54,7 @@ export default (db) => {
                     <input type="text" name="name" placeholder="Имя" required>
                     <input type="email" name="email" placeholder="Email" required>
                     <input type="password" name="password" placeholder="Пароль" required>
-                   <div class="consent-group">
+                    <div class="consent-group">
                         <input type="checkbox" id="consent" required>
                         <label for="consent">Я согласен с <a href="/privacy-policy" target="_blank">Политикой</a></label>
                     </div>
@@ -83,7 +83,7 @@ export default (db) => {
         try {
             res.set('Cache-Control', 'public, max-age=0, must-revalidate'); 
             let pageData = await getCache(LOGIN_PAGE_CACHE_KEY); 
-           if (!pageData) {
+            if (!pageData) {
                 const comments = await db.collection("comments").find().sort({ createdAt: -1 }).toArray(); 
                 const users = await db.collection("users").find().toArray(); 
                 const tasks = await db.collection('tasks').find().sort({ createdAt: -1 }).toArray(); 
@@ -121,18 +121,22 @@ export default (db) => {
                         a.activity-btn { 
                             display: block; 
                             width: 100%; 
-                            padding: 10px; 
+                            padding: 12px; 
                             margin-bottom: 10px; 
-                            background-color: #6f42c1; /* Фиолетовый цвет */
-                            color: white; 
+                          color: white; 
                             text-align: center; 
                             text-decoration: none; 
                             border-radius: 5px; 
                             box-sizing: border-box;
                             font-weight: bold;
                             border: 1px solid rgba(255,255,255,0.2);
+                            transition: 0.3s;
                         }
-                        a.activity-btn:hover { background-color: #5a32a3; transform: scale(1.02); transition: 0.2s; }
+                        .chess-btn { background-color: #6f42c1; } /* Фиолетовый */
+                        .foot-btn { background-color: #fd7e14; } /* Оранжевый */
+                        .dance-btn { background-color: #e83e8c; } /* Розовый */
+                        
+                        a.activity-btn:hover { transform: scale(1.02); opacity: 0.9; }
                         
                         .comment { background: rgba(255,255,255,0.1); padding: 5px; margin-bottom: 5px; }
                         a.link { color: #6cafff; display: block; text-align: center; margin-top: 10px; }
@@ -154,9 +158,9 @@ export default (db) => {
                             </form>
                             <hr>
                             <h3>Активности:</h3>
-                            <a href="/activities/Шахматы" target="_blank" class="activity-btn">♟️ Шахматы (${pageData.chessCount})</a>
-                            <a href="/activities/Футбол" target="_blank" class="activity-btn">⚽ Футбол (${pageData.footballCount})</a>
-                            <a href="/activities/Танцы" target="_blank" class="activity-btn">💃 Танцы (${pageData.danceCount})</a>
+                            <a href="/activities/Шахматы" target="_blank" class="activity-btn chess-btn">♟️ Шахматы (${pageData.chessCount})</a>
+                            <a href="/activities/Футбол" target="_blank" class="activity-btn foot-btn">⚽ Футбол (${pageData.footballCount})</a>
+                            <a href="/activities/Танцы" target="_blank" class="activity-btn dance-btn">💃 Танцы (${pageData.danceCount})</a>
                         </div>
                         
                         <div class="block">
@@ -206,7 +210,7 @@ export default (db) => {
                         button { background: #28a745; color: white; border: none; cursor: pointer; }
                         .logout-btn { background: #dc3545; }
                         a { color: #6cafff; display: block; margin-top: 10px; text-align: center; }
-                      .checkbox-group label { display: inline-block; margin-right: 15px; }
+                        .checkbox-group label { display: inline-block; margin-right: 15px; }
                     </style>
                 </head>
                 <body>
@@ -219,7 +223,7 @@ export default (db) => {
                             <h3>Ваши данные:</h3>
                             <label>Телефон:</label>
                             <input type="text" name="phone" value="${user.phone || ''}" placeholder="+7 (XXX) XXX-XX-XX">
-                          <label>Город:</label>
+                            <label>Город:</label>
                             <input type="text" name="city" value="${user.city || ''}" placeholder="Город">
                             <label>Страна:</label>
                             <input type="text" name="country" value="${user.country || ''}" placeholder="Страна">
@@ -231,9 +235,9 @@ export default (db) => {
                             </div>
                             <label>Время:</label>
                             <input type="text" name="time" value="${availability.time}" placeholder="18:00 - 20:00">
-                          <button type="submit">Сохранить</button>
+                            <button type="submit">Сохранить</button>
                         </form>
-                       <hr>
+                        <hr>
                         <form action="/post-comment" method="POST">
                             <input type="hidden" name="_csrf" value="${res.locals.csrfToken}">
                             <h3>Комментарий</h3>
@@ -266,7 +270,7 @@ export default (db) => {
         } catch (error) { console.error(error); res.status(500).send('Ошибка.'); }
     });
 
-   router.get('/activities/:activityName', async (req, res) => {
+    router.get('/activities/:activityName', async (req, res) => {
         try {
             res.set('Cache-Control', 'public, max-age=0, must-revalidate'); 
             const activityName = req.params.activityName;
@@ -282,7 +286,7 @@ export default (db) => {
         } catch (error) { console.error(error); res.status(500).send('Ошибка.'); }
     });
 
-  router.post("/post-comment", requireLogin, async (req, res) => {
+    router.post("/post-comment", requireLogin, async (req, res) => {
         try {
             await db.collection("comments").insertOne({ authorName: req.session.user.name, text: req.body.commentText, createdAt: new Date() });
             await clearCache(LOGIN_PAGE_CACHE_KEY);
@@ -290,7 +294,7 @@ export default (db) => {
         } catch (error) { console.error(error); res.status(500).send("Ошибка."); }
     });
 
- router.post("/logout", (req, res) => {
+    router.post("/logout", (req, res) => {
         req.session.destroy(() => { res.clearCookie('connect.sid'); res.redirect('/'); });
     });
 

@@ -1,13 +1,13 @@
-document.addEventListener('DOMContentLoaded', () => { 
+document.addEventListener('DOMContentLoaded', () => {
     const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
-   const tabs = document.querySelectorAll('.tab-button');
+    const tabs = document.querySelectorAll('.tab-button');
     const contents = document.querySelectorAll('.tab-content');
     const tasksList = document.getElementById('tasks-list');
     const readyList = document.getElementById('ready-list');
     const uploadForm = document.getElementById('upload-form');
     const uploadReadyForm = document.getElementById('upload-ready-form');
 
-   tabs.forEach(tab => {
+    tabs.forEach(tab => {
         tab.addEventListener('click', () => {
             tabs.forEach(item => item.classList.remove('active'));
             contents.forEach(item => item.classList.remove('active'));
@@ -59,18 +59,28 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (error) { readyList.innerHTML = '<li>Ошибка.</li>'; }
     }
     
+    // ✅ ИСПРАВЛЕНИЕ ОШИБКИ 500 ПРИ ЗАГРУЗКЕ
+    // Мы добавляем заголовок 'x-csrf-token'
     uploadForm.addEventListener('submit', async (e) => {
         e.preventDefault();
-        const response = await fetch('/work/upload', { method: 'POST', body: new FormData(uploadForm) });
+        const response = await fetch('/work/upload', { 
+            method: 'POST', 
+            body: new FormData(uploadForm),
+            headers: { 'x-csrf-token': csrfToken } 
+        });
         if (response.ok) { uploadForm.reset(); fetchTasks(); }
-        else alert('Ошибка.');
+        else alert('Ошибка загрузки (возможно, файл слишком большой).');
     });
 
     uploadReadyForm.addEventListener('submit', async (e) => {
         e.preventDefault();
-        const response = await fetch('/work/upload-ready', { method: 'POST', body: new FormData(uploadReadyForm) });
+        const response = await fetch('/work/upload-ready', { 
+            method: 'POST', 
+            body: new FormData(uploadReadyForm),
+            headers: { 'x-csrf-token': csrfToken }
+        });
         if (response.ok) { uploadReadyForm.reset(); fetchReadyDocuments(); }
-        else alert('Ошибка.');
+        else alert('Ошибка загрузки.');
     });
 
     // Обработка кликов (УДАЛЕНИЕ)
