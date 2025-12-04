@@ -5,7 +5,7 @@ import { setCache, getCache, clearCache, LOGIN_PAGE_CACHE_KEY } from '../cacheSe
 
 const __dirname = path.resolve();
 
-function formatTime(ms) { 
+function formatTime(ms) {
     const seconds = Math.floor((ms / 1000) % 60);
     const minutes = Math.floor((ms / (1000 * 60)) % 60);
     const hours = Math.floor((ms / (1000 * 60 * 60)));
@@ -82,7 +82,7 @@ export default (db) => {
         } catch (error) { console.error(error); res.status(500).send("Ошибка."); }
     });
 
-    // 2. ГЛАВНАЯ
+    // 2. ГЛАВНАЯ (ВХОД)
     router.get("/login", async (req, res) => {
         try {
             res.set('Cache-Control', 'public, max-age=0, must-revalidate'); 
@@ -110,25 +110,33 @@ export default (db) => {
                     ? `<img src="${url}" alt="${t.originalName}">`
                     : `<div class="file-icon">📄</div>`;
                 
-                let statusText = 'Временно занята';
-                let statusClass = 'status-busy';
-                if (t.status === 'free') { statusText = 'Свободна сегодня'; statusClass = 'status-free'; }
-                if (t.status === 'company') { statusText = 'Ждем компанию'; statusClass = 'status-company'; }
-                
-                // ✅ ДОБАВЛЯЕМ СУММУ, ЕСЛИ ОНА ЕСТЬ
-                let amountHtml = t.amount ? `<br><span style="color:#fff; font-weight:normal;">(до ${t.amount})</span>` : '';
+                // ✅ НОВАЯ ЛОГИКА СТАТУСОВ
+                let displayText = '';
+                let displayClass = '';
+
+                // 1. Если написана сумма - показываем только её
+                if (t.amount && t.amount.trim() !== '') {
+                    displayText = t.amount;
+                    displayClass = 'status-amount'; // Голубой цвет
+                } 
+                // 2. Иначе показываем стандартный статус
+                else {
+                    if (t.status === 'free') { displayText = 'Свободна сегодня'; displayClass = 'status-free'; }
+                    else if (t.status === 'company') { displayText = 'Ждем компанию'; displayClass = 'status-company'; }
+                    else { displayText = 'Временно занята'; displayClass = 'status-busy'; }
+                }
 
                 return `
                     <div class="gallery-wrapper">
                         <a href="${url}" target="_blank" class="gallery-item work-border" title="${t.originalName}">
                             ${content}
                         </a>
-                        <div class="status-label ${statusClass}">${statusText}${amountHtml}</div>
+                        <div class="status-label ${displayClass}">${displayText}</div>
                     </div>
                 `;
             }).join('') + `</div>`;
 
-           let completedHtml = `<div class="gallery-grid">` + pageData.readyDocs.map(d => {
+            let completedHtml = `<div class="gallery-grid">` + pageData.readyDocs.map(d => {
                 const url = `/uploads/${d.fileName}`;
                 const content = isImage(d.fileName) 
                     ? `<img src="${url}" alt="${d.originalName}">`
@@ -154,7 +162,7 @@ export default (db) => {
                         .scroll-hint { position: absolute; bottom: 20px; color: white; font-size: 24px; animation: bounce 2s infinite; opacity: 0.7; }
                         @keyframes bounce { 0%, 20%, 50%, 80%, 100% {transform: translateY(0);} 40% {transform: translateY(-10px);} 60% {transform: translateY(-5px);} }
 
-                     .main-wrapper { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; max-width: 1200px; padding-bottom: 50px; }
+                        .main-wrapper { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; max-width: 1200px; padding-bottom: 50px; }
                         .block { background: rgba(0,0,0,0.7); color: white; padding: 20px; border-radius: 8px; width: 320px; margin-bottom: 20px; }
                         input, button { width: 95%; padding: 10px; margin-bottom: 10px; border-radius: 5px; box-sizing: border-box; }
                         button { background: #007BFF; color: white; border: none; cursor: pointer; width: 100%; font-size: 16px; }
@@ -168,10 +176,13 @@ export default (db) => {
                         .ready-border { border: 2px solid #28a745; }
                         .file-icon { font-size: 40px; }
                         
-                        .status-label { font-size: 10px; text-align: center; margin-top: 4px; font-weight: bold; width: 100%; }
-                        .status-free { color: #28a745; } 
-                        .status-company { color: #ffc107; } 
-                        .status-busy { color: #ccc; font-style: italic; }
+                        .status-label { font-size: 10px; text-align: center; margin-top: 4px; font-weight: bold; width: 100%; word-break: break-word; }
+                        
+                        /* ЦВЕТА СТАТУСОВ */
+                        .status-free { color: #28a745; } /* Зеленый */
+                        .status-company { color: #ffc107; } /* Оранжевый */
+                        .status-busy { color: #ccc; font-style: italic; } /* Серый */
+                        .status-amount { color: #00c3ff; font-size: 11px; } /* ✅ Голубой (для суммы) */
 
                         a.activity-btn { display: block; width: 100%; padding: 12px; margin-bottom: 10px; color: white; text-align: center; text-decoration: none; border-radius: 5px; box-sizing: border-box; font-weight: bold; border: 1px solid rgba(255,255,255,0.2); transition: 0.3s; }
                         .chess-btn { background-color: #6f42c1; } 
@@ -216,7 +227,7 @@ export default (db) => {
                                 ${completedHtml || "<p>Нет задач</p>"}
                             </div>
                         </div>
-                      <div class="scroll-hint">⬇</div>
+                        <div class="scroll-hint">⬇</div>
                     </div>
 
                     <div class="page-section second-page">
@@ -237,7 +248,7 @@ export default (db) => {
         } catch (error) { console.error(error); res.status(500).send("Ошибка."); }
     });
     
-  router.get("/profile", requireLogin, async (req, res) => {
+    router.get("/profile", requireLogin, async (req, res) => {
         try {
             res.set('Cache-Control', 'public, max-age=0, must-revalidate'); 
             const user = await db.collection('users').findOne({ _id: ObjectId.createFromHexString(req.session.user._id) });
@@ -316,7 +327,7 @@ export default (db) => {
         } catch (error) { console.error(error); res.status(500).send('Ошибка.'); }
     });
 
-   router.get("/activities", requireLogin, async (req, res) => {
+    router.get("/activities", requireLogin, async (req, res) => {
         try {
             res.set('Cache-Control', 'public, max-age=0, must-revalidate');  
             const users = await db.collection("users").find().toArray();
@@ -414,7 +425,7 @@ export default (db) => {
         req.session.destroy(() => { res.clearCookie('connect.sid'); res.redirect('/'); });
     });
 
-   router.get('/privacy-policy', (req, res) => {
+    router.get('/privacy-policy', (req, res) => {
         res.send(`
             <!DOCTYPE html>
             <html lang="ru">
@@ -457,4 +468,4 @@ export default (db) => {
     });
 
     return router;
-}; 
+};
