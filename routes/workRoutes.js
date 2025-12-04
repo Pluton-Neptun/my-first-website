@@ -15,6 +15,7 @@ export default (db, upload) => {
     const router = express.Router();
     const uploadDir = path.join(__dirname, 'public', 'uploads');
 
+    // 1. СТРАНИЦА "КОКТЕЙЛЬ"
     router.get('/', requireLogin, (req, res) => { 
         res.set('Cache-Control', 'public, max-age=0, must-revalidate'); 
         res.send(`
@@ -79,33 +80,39 @@ export default (db, upload) => {
         `);
     });
 
+    // 2. ЗАГРУЗКА (Теперь возвращает JSON, а не редирект)
     router.post('/upload', requireLogin, upload.single('document'), async (req, res) => {
         try {
-            if (!req.file) return res.status(400).send('Нет файла.');
+            if (!req.file) return res.status(400).json({ error: 'Нет файла.' });
             await db.collection('tasks').insertOne({
                 originalName: req.file.originalname, fileName: req.file.filename, path: req.file.path,
                 uploadedBy: req.session.user.name, userId: ObjectId.createFromHexString(req.session.user._id), createdAt: new Date()
             });
             await clearCache(LOGIN_PAGE_CACHE_KEY); 
-            res.redirect('/work');
-        } catch (error) { console.error(error); res.status(500).send('Ошибка.'); }
+            // ✅ Исправлено: Возвращаем JSON
+            res.json({ status: 'ok' });
+        } catch (error) { console.error(error); res.status(500).json({ error: 'Ошибка сервера' }); }
     });
 
     router.post('/upload-ready', requireLogin, upload.single('document'), async (req, res) => {
         try {
-            if (!req.file) return res.status(400).send('Нет файла.');
+            if (!req.file) return res.status(400).json({ error: 'Нет файла.' });
             await db.collection('ready_documents').insertOne({
                 originalName: req.file.originalname, fileName: req.file.filename, path: req.file.path,
                 uploadedBy: req.session.user.name, userId: ObjectId.createFromHexString(req.session.user._id),
                 createdAt: new Date(), completedAt: new Date()
             });
             await clearCache(LOGIN_PAGE_CACHE_KEY); 
-            res.redirect('/work');
-        } catch (error) { console.error(error); res.status(500).send('Ошибка.'); }
+            // ✅ Исправлено: Возвращаем JSON
+            res.json({ status: 'ok' });
+        } catch (error) { console.error(error); res.status(500).json({ error: 'Ошибка сервера' }); }
     }); 
 
+    // 3. СПИСКИ (Теперь запрещено кэширование)
     router.get('/tasks', requireLogin, async (req, res) => { 
         try {
+            // ✅ ВАЖНО: Запрещаем кэш, чтобы список всегда обновлялся
+            res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
             const tasks = await db.collection('tasks').find().sort({ createdAt: -1 }).toArray(); 
             res.json(tasks);
         } catch (error) { res.status(500).json({ message: "Ошибка." }); }
@@ -113,12 +120,14 @@ export default (db, upload) => {
 
     router.get('/ready-documents', requireLogin, async (req, res) => { 
         try {
+            // ✅ ВАЖНО: Запрещаем кэш
+            res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
             const documents = await db.collection('ready_documents').find().sort({ completedAt: -1 }).toArray();   
             res.json(documents);
         } catch (error) { res.status(500).json({ message: "Ошибка." }); }
     });
 
-    // УДАЛЕНИЕ ЗАДАЧИ
+    // 4. УДАЛЕНИЕ
     router.delete('/tasks/:id', requireLogin, async (req, res) => {
         try {
             const taskId = req.params.id;
@@ -133,8 +142,7 @@ export default (db, upload) => {
         } catch (error) { console.error(error); res.status(500).send('Ошибка'); }
     });
 
-    // УДАЛЕНИЕ ГОТОВОГО
-    router.delete('/ready-documents/:id', requireLogin, async (req, res) => {
+ router.delete('/ready-documents/:id', requireLogin, async (req, res) => {
         try {
             const docId = req.params.id;
             const doc = await db.collection('ready_documents').findOne({ _id: ObjectId.createFromHexString(docId) });

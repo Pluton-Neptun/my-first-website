@@ -16,8 +16,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // СПИСОК ЗАДАЧ (Без кнопки скачать)
-    async function fetchTasks() {
+   async function fetchTasks() {
         try {
             const response = await fetch('/work/tasks');
             if (!response.ok) throw new Error('Ошибка');
@@ -27,8 +26,7 @@ document.addEventListener('DOMContentLoaded', () => {
             else {
                 tasks.forEach(task => {
                     const li = document.createElement('li');
-                    // Добавлена кнопка УДАЛИТЬ (delete-task-btn)
-                    li.innerHTML = `
+                   li.innerHTML = `
                         <span>${task.originalName} (${task.uploadedBy})</span>
                         <button class="delete-btn delete-task-btn" data-id="${task._id}">Удалить</button>
                     `;
@@ -38,8 +36,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (error) { tasksList.innerHTML = '<li>Ошибка.</li>'; }
     }
 
-    // СПИСОК ГОТОВЫХ (Без кнопки скачать)
-    async function fetchReadyDocuments() {
+   async function fetchReadyDocuments() {
         try {
             const response = await fetch('/work/ready-documents');
             if (!response.ok) throw new Error('Ошибка');
@@ -59,9 +56,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (error) { readyList.innerHTML = '<li>Ошибка.</li>'; }
     }
     
-    // ✅ ИСПРАВЛЕНИЕ ОШИБКИ 500 ПРИ ЗАГРУЗКЕ
-    // Мы добавляем заголовок 'x-csrf-token'
-    uploadForm.addEventListener('submit', async (e) => {
+   uploadForm.addEventListener('submit', async (e) => {
         e.preventDefault();
         const response = await fetch('/work/upload', { 
             method: 'POST', 
@@ -69,7 +64,7 @@ document.addEventListener('DOMContentLoaded', () => {
             headers: { 'x-csrf-token': csrfToken } 
         });
         if (response.ok) { uploadForm.reset(); fetchTasks(); }
-        else alert('Ошибка загрузки (возможно, файл слишком большой).');
+        else alert('Ошибка загрузки.');
     });
 
     uploadReadyForm.addEventListener('submit', async (e) => {
@@ -83,8 +78,7 @@ document.addEventListener('DOMContentLoaded', () => {
         else alert('Ошибка загрузки.');
     });
 
-    // Обработка кликов (УДАЛЕНИЕ)
-    tasksList.addEventListener('click', async (e) => {
+   tasksList.addEventListener('click', async (e) => {
         if (e.target.classList.contains('delete-task-btn')) {
             if (confirm('Удалить файл?')) {
                 const response = await fetch(`/work/tasks/${e.target.dataset.id}`, { 

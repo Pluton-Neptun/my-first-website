@@ -11,21 +11,91 @@ import { MongoClient, ObjectId } from "mongodb";
 import 'dotenv/config';
 import multer from 'multer';
 import fs from 'fs';
-// 1. Импорт защиты
-import { csrfSync } from "csrf-sync";
+import { createClient } from 'redis';
+import { csrfSync } from 'csrf-sync'; // ✅ ЗАЩИТА CSRF
 
-// Импорт сервисов и маршрутов
-import { connectRedis } from './cacheService.js';
-import authRoutes from './routes/authRoutes.js';
-import activitiesRoutes from './routes/activitiesRoutes.js';
-import workRoutes from './routes/workRoutes.js';
-
+// --- Инициализация Express ---
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// --- Настройка multer ---
+// --- Настройка CSRF (Защита от атак) ---
+const { csrfSynchronisedProtection } = csrfSync({
+    getTokenFromRequest: (req) => {
+        if (req.body && req.body._csrf) return req.body._csrf;
+        if (req.headers['x-csrf-token']) return req.headers['x-csrf-token'];
+        return null;
+    }
+});
+
+// --- Инициализация Redis (С ЗАЩИТОЙ ОТ СБОЕВ) ---
+const redisClient = createClient({ 
+    url: process.env.REDIS_URL || 'redis://localhost:6379',
+    socket: {
+        reconnectStrategy: false // Не пытаться бесконечно подключаться, если нет Redis
+    }
+});
+
+// Чтобы ошибка Redis не крашила весь сервер
+redisClient.on('error', (err) => {
+    // Просто выводим в консоль, но не останавливаем сервер
+    console.log('⚠️ Redis не подключен (это нормально для локального теста). Кэш выключен.'); 
+});
+
+// --- Вспомогательные функции кэширования ---
+const DEFAULT_EXPIRATION = 3600; // 1 час кэша
+
+async function setCache(key, value, options = { EX: DEFAULT_EXPIRATION }) {
+    if (redisClient.isOpen) { // ✅ Проверяем, работает ли Redis
+        try {
+            await redisClient.set(key, JSON.stringify(value), options);
+        } catch (e) { console.error("Ошибка записи кэша"); }
+    }
+}
+
+async function getCache(key) {
+    if (redisClient.isOpen) { // ✅ Проверяем, работает ли Redis
+        try {
+            const cachedValue = await redisClient.get(key);
+            return cachedValue ? JSON.parse(cachedValue) : null;
+        } catch (e) { return null; }
+    }
+    return null;
+}
+
+async function clearCache(key) {
+    if (redisClient.isOpen) { // ✅ Проверяем, работает ли Redis
+        try {
+            if (key.endsWith('*')) { 
+                const keys = await redisClient.keys(key);
+                if (keys.length > 0) await redisClient.del(keys);
+            } else {
+                await redisClient.del(key);
+            }
+        } catch (e) { console.error("Ошибка очистки кэша"); }
+    }
+}
+
+export { setCache, getCache, clearCache, LOGIN_PAGE_CACHE_KEY }; // Экспортируем для роутов
+
+const LOGIN_PAGE_CACHE_KEY = 'loginPageData';
+
+// Вспомогательная функция для форматирования времени
+function formatTime(ms) {
+    const seconds = Math.floor((ms / 1000) % 60);
+    const minutes = Math.floor((ms / (1000 * 60)) % 60);
+    const hours = Math.floor((ms / (1000 * 60 * 60)));
+
+    let parts = [];
+    if (hours > 0) parts.push(`${hours}ч`);
+    if (minutes > 0) parts.push(`${minutes}м`);
+    if (seconds > 0 || parts.length === 0) parts.push(`${seconds}с`);
+
+    return parts.join(' ');
+}
+
+// --- Настройка multer для загрузки файлов ---
 const uploadDir = path.join(__dirname, 'public', 'uploads');
 if (!fs.existsSync(uploadDir)){
     fs.mkdirSync(uploadDir, { recursive: true });
@@ -36,47 +106,38 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage: storage });
 
-function startFileCleanupJob() { console.log("Фоновая задача очистки файлов запущена."); }
-
-app.use(cors()); 
+// --- Middleware ---
+app.use(cors());
 app.use(bodyParser.urlencoded({ extended: true }));
+app.use(express.json()); // Добавлено для JSON запросов
 
-// Настройка статики
-app.use(express.static(path.join(__dirname, "public"), { 
-    setHeaders: (res, filePath) => {
-        if (filePath.endsWith('.css') || filePath.endsWith('.js')) {
-            res.setHeader('Cache-Control', 'public, max-age=3600');
-        } else {
-            res.setHeader('Cache-Control', 'public, max-age=604800');
-        }
-    }
-}));
-app.use('/uploads', express.static(uploadDir, { maxAge: 1000 * 60 * 60 * 24 * 7 }));
+const STATIC_MAX_AGE_MS = 1000 * 60 * 60 * 24 * 7;  
+app.use(express.static(path.join(__dirname, "public"), { maxAge: STATIC_MAX_AGE_MS }));
+app.use('/uploads', express.static(uploadDir, { maxAge: STATIC_MAX_AGE_MS }));
 
-// Сессии
-app.use(session({
+app.use(session({ 
     secret: "my_secret_key",
     resave: false,
     saveUninitialized: false,
     store: MongoStore.create({ mongoUrl: process.env.DATABASE_URL })
 }));
 
-// 2. Настройка CSRF (защита форм)
-const { csrfSynchronisedProtection } = csrfSync({
-    getTokenFromRequest: (req) => {
-        return req.body['_csrf'] || req.headers['x-csrf-token'];
-    }
-});
-
-// Включаем защиту глобально для всех POST запросов
+// ✅ Включаем защиту CSRF
 app.use(csrfSynchronisedProtection);
 
-// Передаем токен во все шаблоны
+// Middleware для передачи токена во все шаблоны (res.locals)
 app.use((req, res, next) => {
-    res.locals.csrfToken = req.csrfToken();
+    res.locals.csrfToken = req.csrfToken(); 
     next();
 });
 
+// --- Импорт маршрутов ---
+import authRoutes from './routes/authRoutes.js';
+import workRoutes from './routes/workRoutes.js';
+// Если у вас есть activitiesRoutes, раскомментируйте:
+// import activitiesRoutes from './routes/activitiesRoutes.js';
+
+// --- Настройка подключения к базе данных ---
 const mongoClient = new MongoClient(process.env.DATABASE_URL);
 let db;
 
@@ -84,46 +145,40 @@ async function connectToDb() {
     try {
         await mongoClient.connect();
         console.log("Успешно подключились к MongoDB");
-        await connectRedis(); 
+        
+        // Попытка подключить Redis, но не падаем, если не вышло
+        try {
+            await redisClient.connect();
+            console.log("Успешно подключились к Redis");
+        } catch (redisError) {
+            console.log("⚠️ Redis не доступен локально. Работаем без кэша.");
+        }
+        
         db = mongoClient.db("my-first-website-db");
         
-        // Маршруты
-        app.get('/', (req, res) => { 
-            // Перенаправляем на логин, чтобы там сгенерировался токен и HTML
-            res.redirect('/login');
-        });
+        // Подключаем маршруты
+        app.use('/', authRoutes(db));
+        app.use('/work', workRoutes(db, upload)); // Маршруты "Коктейль"
+        // app.use('/', activitiesRoutes(db)); // Если нужно
 
-         app.get('/privacy-policy', (req, res) => {
-            res.sendFile(path.join(__dirname, 'public', 'privacy-policy.html'));
+        // Глобальный обработчик ошибок (чтобы сервер не падал)
+        app.use((err, req, res, next) => {
+            if (err.code === 'EBADCSRFTOKEN') {
+                return res.status(403).send('<h2>Ошибка безопасности (CSRF)</h2><p>Попробуйте обновить страницу.</p>');
+            }
+            console.error(err);
+            res.status(500).send('Что-то пошло не так!');
         });
         
-         app.use('/', authRoutes(db));
-        app.use('/activities', activitiesRoutes(db)); 
-        app.use('/work', workRoutes(db, upload)); 
-        
-         app.listen(PORT, () => {
+        app.listen(PORT, () => {
             console.log(`Сервер запущен: http://localhost:${PORT}`);
-            if (!process.env.RENDER) open(`http://localhost:${PORT}`);
-            startFileCleanupJob(); 
+            if (!process.env.RENDER) {
+                // open(`http://localhost:${PORT}`); // Можно раскомментировать
+            }
         });
     } catch (error) {
-        console.error("Ошибка подключения:", error);
-        process.exit(1);
+        console.error("Критическая ошибка запуска:", error);
     }
 }
-
-// Глобальная обработка ошибок (включая ошибку CSRF)
-app.use((err, req, res, next) => {
-    if (err.code === 'EBADCSRFTOKEN') {
-        return res.status(403).send(`
-            <h1 style="color:red; text-align:center; margin-top:50px;">Ошибка безопасности (CSRF)</h1>
-            <p style="text-align:center;">Ваша сессия устарела или запрос небезопасен.</p>
-            <p style="text-align:center;"><a href="/">Вернуться на главную</a></p>
-        `);
-    }
-    console.error(`\n[FATAL ERROR] Path: ${req.path}`);
-    console.error(err.stack);
-    if (!res.headersSent) res.status(500).send('<h1>Внутренняя ошибка сервера.</h1>');
-});
 
 connectToDb();
