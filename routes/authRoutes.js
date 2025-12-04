@@ -83,7 +83,7 @@ export default (db) => {
         } catch (error) { console.error(error); res.status(500).send("Ошибка."); }
     });
 
-    // 2. ГЛАВНАЯ (ВХОД) С ГАЛЕРЕЕЙ
+    // 2. ГЛАВНАЯ (ВХОД) - ТЕПЕРЬ С ДВУМЯ ЛИСТАМИ
     router.get("/login", async (req, res) => {
         try {
             res.set('Cache-Control', 'public, max-age=0, must-revalidate'); 
@@ -111,7 +111,7 @@ export default (db) => {
                     ? `<img src="${url}" alt="${t.originalName}">`
                     : `<div class="file-icon">📄</div>`;
                 
-             let statusText = 'Временно занята';
+                let statusText = 'Временно занята';
                 let statusClass = 'status-busy';
                 if (t.status === 'free') { statusText = 'Свободна сегодня'; statusClass = 'status-free'; }
                 if (t.status === 'company') { statusText = 'Ждем компанию'; statusClass = 'status-company'; }
@@ -145,12 +145,59 @@ export default (db) => {
                     <meta charset="UTF-8"><title>Вход</title>
                     <script src="/ga.js"></script>
                     <style>
-                        body { font-family: Arial; background: url('/images/background.jpg') center/cover fixed; display: flex; justify-content: center; padding: 20px; margin: 0; }
-                        .main-wrapper { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; max-width: 1200px; }
+                        /* --- НАСТРОЙКА ПЕРЕЛИСТЫВАНИЯ (SCROLL SNAP) --- */
+                        html {
+                            scroll-snap-type: y mandatory; /* Включаем "прилипание" по вертикали */
+                        }
+                        body { 
+                            font-family: Arial; 
+                            background: url('/images/background.jpg') center/cover fixed; 
+                            margin: 0; 
+                            height: 100vh; 
+                            overflow-y: scroll;
+                        }
+
+                        /* КАЖДЫЙ ЛИСТ - ЭТО СЕКЦИЯ */
+                        .page-section {
+                            min-height: 100vh; /* Высота во весь экран */
+                            width: 100%;
+                            scroll-snap-align: start; /* Прилипать к началу секции */
+                            display: flex;
+                            justify-content: center;
+                            align-items: flex-start; /* Контент сверху */
+                            padding-top: 40px;
+                            box-sizing: border-box;
+                            position: relative;
+                        }
+
+                        /* ВТОРОЙ ЛИСТ */
+                        .second-page {
+                            /* Можно сделать чуть темнее, чтобы отличать */
+                            background: rgba(0, 0, 0, 0.4); 
+                            align-items: center; /* Центрируем текст на втором листе */
+                        }
+
+                        /* Стрелка вниз */
+                        .scroll-hint {
+                            position: absolute;
+                            bottom: 20px;
+                            color: white;
+                            font-size: 24px;
+                            animation: bounce 2s infinite;
+                            opacity: 0.7;
+                        }
+                        @keyframes bounce {
+                            0%, 20%, 50%, 80%, 100% {transform: translateY(0);}
+                            40% {transform: translateY(-10px);}
+                            60% {transform: translateY(-5px);}
+                        }
+
+                        /* --- СТАРЫЕ СТИЛИ КОНТЕНТА --- */
+                        .main-wrapper { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; max-width: 1200px; padding-bottom: 50px; }
                         .block { background: rgba(0,0,0,0.7); color: white; padding: 20px; border-radius: 8px; width: 320px; margin-bottom: 20px; }
                         input, button { width: 95%; padding: 10px; margin-bottom: 10px; border-radius: 5px; box-sizing: border-box; }
                         button { background: #007BFF; color: white; border: none; cursor: pointer; width: 100%; font-size: 16px; }
-                      
+                        
                         .gallery-grid { display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-start; }
                         .gallery-wrapper { display: flex; flex-direction: column; align-items: center; width: 90px; }
                         .gallery-item {
@@ -182,36 +229,45 @@ export default (db) => {
                     </style>
                 </head>
                 <body>
-                    <div class="main-wrapper">
-                        <div class="block">
-                            <h3>Вход</h3>
-                            <form action="/login" method="POST">
-                                <input type="hidden" name="_csrf" value="${res.locals.csrfToken}">
-                                <input type="email" name="email" placeholder="Email" required>
-                                <input type="password" name="password" placeholder="Пароль" required>
-                                <button type="submit">Войти</button>
-                                <a href="/register" class="link">Нет аккаунта? Регистрация</a>
-                            </form>
-                            <hr>
-                            <h3>Активности:</h3>
-                            <a href="/activities/Шахматы" target="_blank" class="activity-btn chess-btn">♟️ Шахматы (${pageData.chessCount})</a>
-                            <a href="/activities/Футбол" target="_blank" class="activity-btn foot-btn">⚽ Футбол (${pageData.footballCount})</a>
-                            <a href="/activities/Танцы" target="_blank" class="activity-btn dance-btn">💃 Танцы (${pageData.danceCount})</a>
+                    <div class="page-section">
+                        <div class="main-wrapper">
+                            <div class="block">
+                                <h3>Вход</h3>
+                                <form action="/login" method="POST">
+                                    <input type="hidden" name="_csrf" value="${res.locals.csrfToken}">
+                                    <input type="email" name="email" placeholder="Email" required>
+                                    <input type="password" name="password" placeholder="Пароль" required>
+                                    <button type="submit">Войти</button>
+                                    <a href="/register" class="link">Нет аккаунта? Регистрация</a>
+                                </form>
+                                <hr>
+                                <h3>Активности:</h3>
+                                <a href="/activities/Шахматы" target="_blank" class="activity-btn chess-btn">♟️ Шахматы (${pageData.chessCount})</a>
+                                <a href="/activities/Футбол" target="_blank" class="activity-btn foot-btn">⚽ Футбол (${pageData.footballCount})</a>
+                                <a href="/activities/Танцы" target="_blank" class="activity-btn dance-btn">💃 Танцы (${pageData.danceCount})</a>
+                            </div>
+                            
+                            <div class="block">
+                                <h3>Последние комментарии</h3>
+                                ${commentsHtml || "<p>Пусто</p>"}
+                            </div>
+                            <div class="block">
+                                <h3>🍹 Коктейль (Галерея)</h3>
+                                ${tasksHtml || "<p>Нет загрузок</p>"}
+                            </div>
+                            <div class="block">
+                                <h3>Выполнено (Галерея)</h3>
+                                ${completedHtml || "<p>Нет задач</p>"}
+                            </div>
                         </div>
                         
-                        <div class="block">
-                            <h3>Последние комментарии</h3>
-                            ${commentsHtml || "<p>Пусто</p>"}
-                        </div>
-                        <div class="block">
-                            <h3>🍹 Коктейль (Галерея)</h3>
-                            ${tasksHtml || "<p>Нет загрузок</p>"}
-                        </div>
-                         <div class="block">
-                            <h3>Выполнено (Галерея)</h3>
-                            ${completedHtml || "<p>Нет задач</p>"}
-                        </div>
+                        <div class="scroll-hint">⬇</div>
                     </div>
+
+                    <div class="page-section second-page">
+                        <h2 style="color: rgba(255,255,255,0.3);">Второй лист (Пусто)</h2>
+                    </div>
+
                 </body>
                 </html>
             `);
@@ -306,7 +362,7 @@ export default (db) => {
         } catch (error) { console.error(error); res.status(500).send('Ошибка.'); }
     });
 
-    // 4. ✅ ВОТ ЭТОТ БЛОК БЫЛ УТЕРЯН — ВОЗВРАЩАЕМ СПИСОК АКТИВНОСТЕЙ
+    // 4. СПИСОК АКТИВНОСТЕЙ
     router.get("/activities", requireLogin, async (req, res) => {
         try {
             res.set('Cache-Control', 'public, max-age=0, must-revalidate');  
@@ -359,8 +415,7 @@ export default (db) => {
         } catch(error) { console.error(error); res.status(500).send("Ошибка."); }
     });
 
-    // 5. ЛОГИКА ЗАПИСИ НА АКТИВНОСТИ
-    router.post("/update-activity", requireLogin, async (req, res) => {
+   router.post("/update-activity", requireLogin, async (req, res) => {
         try {
             const { activity, action } = req.body;
             const userId = ObjectId.createFromHexString(req.session.user._id);
@@ -370,8 +425,7 @@ export default (db) => {
             
             if (updateQuery) {
                 await db.collection("users").updateOne({ _id: userId }, updateQuery);
-                // Обновляем сессию
-                const updatedUser = await db.collection("users").findOne({ _id: userId });
+             const updatedUser = await db.collection("users").findOne({ _id: userId });
                 req.session.user.activities = updatedUser.activities;
             }
             await clearCache(LOGIN_PAGE_CACHE_KEY);  
