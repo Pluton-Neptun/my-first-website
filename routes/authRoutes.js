@@ -5,8 +5,7 @@ import { setCache, getCache, clearCache, LOGIN_PAGE_CACHE_KEY } from '../cacheSe
 
 const __dirname = path.resolve();
 
-// Вспомогательная функция времени
-function formatTime(ms) {
+function formatTime(ms) { 
     const seconds = Math.floor((ms / 1000) % 60);
     const minutes = Math.floor((ms / (1000 * 60)) % 60);
     const hours = Math.floor((ms / (1000 * 60 * 60)));
@@ -25,7 +24,7 @@ const requireLogin = (req, res, next) => {
 export default (db) => {
     const router = express.Router();
 
-    // 1. СТРАНИЦА РЕГИСТРАЦИИ (Чистая, без городов и стран)
+    // 1. РЕГИСТРАЦИЯ
     router.get('/register.html', (req, res) => res.redirect('/register')); 
     
     router.get('/register', (req, res) => {
@@ -33,8 +32,7 @@ export default (db) => {
             <!DOCTYPE html>
             <html lang="ru">
             <head>
-                <meta charset="UTF-8">
-                <title>Регистрация</title>
+                <meta charset="UTF-8"><title>Регистрация</title>
                 <script src="/ga.js"></script>
                 <style>
                     body { font-family: Arial, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background-image: url('/images/background.jpg'); background-size: cover; background-position: center; background-attachment: fixed; }
@@ -56,10 +54,9 @@ export default (db) => {
                     <input type="text" name="name" placeholder="Имя" required>
                     <input type="email" name="email" placeholder="Email" required>
                     <input type="password" name="password" placeholder="Пароль" required>
-                    
-                    <div class="consent-group">
+                   <div class="consent-group">
                         <input type="checkbox" id="consent" required>
-                        <label for="consent">Я согласен с <a href="/privacy-policy" target="_blank">Политикой конфиденциальности</a></label>
+                        <label for="consent">Я согласен с <a href="/privacy-policy" target="_blank">Политикой</a></label>
                     </div>
                     <button type="submit">Зарегистрироваться</button>
                     <a href="/login">Уже есть аккаунт? Войти</a>
@@ -73,27 +70,20 @@ export default (db) => {
         try {
             const { name, email, password } = req.body;
             const existingUser = await db.collection("users").findOne({ email: email });
-            if (existingUser) return res.send(`<h2>Ошибка</h2><p>Email ${email} уже зарегистрирован.</p><a href="/register">Назад</a>`);
-            
-            // Создаем пользователя (пока без телефона и города)
-            const newUser = { 
-                name, email, password, 
-                phone: "", city: "", country: "", 
-                registeredAt: new Date().toLocaleString(), activities: [] 
-            };
-         await db.collection("users").insertOne(newUser);
+            if (existingUser) return res.send(`<h2>Ошибка</h2><p>Email занят.</p><a href="/register">Назад</a>`);
+            const newUser = { name, email, password, phone: "", city: "", country: "", registeredAt: new Date().toLocaleString(), activities: [] };
+            await db.collection("users").insertOne(newUser);
             await clearCache(LOGIN_PAGE_CACHE_KEY);
-            res.send(`<h2>Успешно!</h2><p>Спасибо, ${name}. <a href="/login">Войти</a>.</p>`);
-        } catch (error) { console.error(error); res.status(500).send("Ошибка сервера."); }
+            res.send(`<h2>Успешно!</h2><p><a href="/login">Войти</a></p>`);
+        } catch (error) { console.error(error); res.status(500).send("Ошибка."); }
     });
 
-    // 2. СТРАНИЦА ВХОДА (ГЛАВНАЯ)
+    // 2. СТРАНИЦА ВХОДА
     router.get("/login", async (req, res) => {
         try {
             res.set('Cache-Control', 'public, max-age=0, must-revalidate'); 
             let pageData = await getCache(LOGIN_PAGE_CACHE_KEY); 
-            
-            if (!pageData) {
+           if (!pageData) {
                 const comments = await db.collection("comments").find().sort({ createdAt: -1 }).toArray(); 
                 const users = await db.collection("users").find().toArray(); 
                 const tasks = await db.collection('tasks').find().sort({ createdAt: -1 }).toArray(); 
@@ -109,9 +99,9 @@ export default (db) => {
 
             let commentsHtml = pageData.comments.map(c => `<div class="comment"><b>${c.authorName}:</b> ${c.text}</div>`).join('');
             let tasksHtml = pageData.tasks.map(t => `<div class="work-item"><span>${t.originalName}</span><span class="work-author">${t.uploadedBy}</span></div>`).join('');
-            let completedHtml = pageData.readyDocs.map(doc => {
-                const time = formatTime(new Date(doc.completedAt) - new Date(doc.createdAt));
-                return `<div class="completed-item">✅ <span>${doc.originalName}</span> <span class="completed-details">(${doc.uploadedBy} | ${time})</span></div>`;
+            let completedHtml = pageData.readyDocs.map(d => {
+                const time = formatTime(new Date(d.completedAt) - new Date(d.createdAt));
+                return `<div class="completed-item">✅ <span>${d.originalName}</span> <span class="completed-details">(${d.uploadedBy} | ${time})</span></div>`;
             }).join('');
 
             res.send(` 
@@ -124,14 +114,28 @@ export default (db) => {
                         body { font-family: Arial; background: url('/images/background.jpg') center/cover fixed; display: flex; justify-content: center; padding: 20px; margin: 0; }
                         .main-wrapper { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; max-width: 1200px; }
                         .block { background: rgba(0,0,0,0.7); color: white; padding: 20px; border-radius: 8px; width: 320px; margin-bottom: 20px; }
-                        input, button { width: 95%; padding: 10px; margin-bottom: 10px; border-radius: 5px; }
-                        button { background: #007BFF; color: white; border: none; cursor: pointer; }
-                        .comment { background: rgba(255,255,255,0.1); padding: 5px; margin-bottom: 5px; }
-                        a { color: #6cafff; display: block; text-align: center; }
-                        /* Ссылки на активности */
-                        a.activity-link { display: inline-block; text-align: left; margin: 5px 0; font-size: 1.1em; text-decoration: none; border-bottom: 1px dashed #6cafff; color: white; }
-                        a.activity-link:hover { color: #6cafff; border-bottom-style: solid; }
+                        input, button { width: 95%; padding: 10px; margin-bottom: 10px; border-radius: 5px; box-sizing: border-box; }
+                        button { background: #007BFF; color: white; border: none; cursor: pointer; width: 100%; font-size: 16px; }
                         
+                        /* ✅ НОВЫЙ СТИЛЬ КНОПОК АКТИВНОСТЕЙ */
+                        a.activity-btn { 
+                            display: block; 
+                            width: 100%; 
+                            padding: 10px; 
+                            margin-bottom: 10px; 
+                            background-color: #6f42c1; /* Фиолетовый цвет */
+                            color: white; 
+                            text-align: center; 
+                            text-decoration: none; 
+                            border-radius: 5px; 
+                            box-sizing: border-box;
+                            font-weight: bold;
+                            border: 1px solid rgba(255,255,255,0.2);
+                        }
+                        a.activity-btn:hover { background-color: #5a32a3; transform: scale(1.02); transition: 0.2s; }
+                        
+                        .comment { background: rgba(255,255,255,0.1); padding: 5px; margin-bottom: 5px; }
+                        a.link { color: #6cafff; display: block; text-align: center; margin-top: 10px; }
                         h2, h3 { text-align: center; margin-top: 0; }
                         .work-item { border-left: 3px solid orange; padding: 5px; background: rgba(255,165,0,0.2); margin-bottom: 5px; }
                         .completed-item { border-left: 3px solid green; padding: 5px; background: rgba(0,128,0,0.2); margin-bottom: 5px; }
@@ -146,13 +150,13 @@ export default (db) => {
                                 <input type="email" name="email" placeholder="Email" required>
                                 <input type="password" name="password" placeholder="Пароль" required>
                                 <button type="submit">Войти</button>
-                                <a href="/register">Нет аккаунта? Регистрация</a>
+                                <a href="/register" class="link">Нет аккаунта? Регистрация</a>
                             </form>
                             <hr>
-                            <h3>Активности (Нажмите):</h3>
-                            <p><a href="/activities/Шахматы" target="_blank" class="activity-link">♟️ Шахматы: ${pageData.chessCount}</a></p>
-                            <p><a href="/activities/Футбол" target="_blank" class="activity-link">⚽ Футбол: ${pageData.footballCount}</a></p>
-                            <p><a href="/activities/Танцы" target="_blank" class="activity-link">💃 Танцы: ${pageData.danceCount}</a></p>
+                            <h3>Активности:</h3>
+                            <a href="/activities/Шахматы" target="_blank" class="activity-btn">♟️ Шахматы (${pageData.chessCount})</a>
+                            <a href="/activities/Футбол" target="_blank" class="activity-btn">⚽ Футбол (${pageData.footballCount})</a>
+                            <a href="/activities/Танцы" target="_blank" class="activity-btn">💃 Танцы (${pageData.danceCount})</a>
                         </div>
                         
                         <div class="block">
@@ -176,14 +180,9 @@ export default (db) => {
 
     router.post("/login", async (req, res) => {
         try {
-            const { email, password } = req.body;
-            const user = await db.collection("users").findOne({ email, password });
-            if (user) {
-                req.session.user = user;
-                res.redirect("/profile");
-            } else {
-                res.send(`<h2>Ошибка</h2><p>Неверные данные.</p><a href="/login">Назад</a>`);
-            }
+            const user = await db.collection("users").findOne({ email: req.body.email, password: req.body.password });
+            if (user) { req.session.user = user; res.redirect("/profile"); }
+            else { res.send(`<h2>Ошибка</h2><p>Неверно.</p><a href="/login">Назад</a>`); }
         } catch (error) { console.error(error); res.status(500).send("Ошибка."); }
     });
     
@@ -207,44 +206,34 @@ export default (db) => {
                         button { background: #28a745; color: white; border: none; cursor: pointer; }
                         .logout-btn { background: #dc3545; }
                         a { color: #6cafff; display: block; margin-top: 10px; text-align: center; }
-                     .availability-form h3 { margin-top: 0; }
-                     .availability-form label { display: block; margin-bottom: 5px; }
-                        .checkbox-group label { display: inline-block; margin-right: 15px; }
+                      .checkbox-group label { display: inline-block; margin-right: 15px; }
                     </style>
                 </head>
                 <body>
                     <div class="content">
                         <h2>Привет, ${user.name}!</h2>
                         <p><b>Email:</b> ${user.email}</p>
-                     <hr>
-                        
-                        <form action="/update-availability" method="POST" class="availability-form">
+                        <hr>
+                        <form action="/update-availability" method="POST">
                             <input type="hidden" name="_csrf" value="${res.locals.csrfToken}">
-                            <h3>Заполните данные для активностей:</h3>
-                            
-                            <label>Номер телефона:</label>
+                            <h3>Ваши данные:</h3>
+                            <label>Телефон:</label>
                             <input type="text" name="phone" value="${user.phone || ''}" placeholder="+7 (XXX) XXX-XX-XX">
-                            
-                            <label>Город:</label>
-                            <input type="text" name="city" value="${user.city || ''}" placeholder="Например: Актау">
-                            
+                          <label>Город:</label>
+                            <input type="text" name="city" value="${user.city || ''}" placeholder="Город">
                             <label>Страна:</label>
-                            <input type="text" name="country" value="${user.country || ''}" placeholder="Например: Казахстан">
-
+                            <input type="text" name="country" value="${user.country || ''}" placeholder="Страна">
                             <div class="checkbox-group">
                                 <label>Дни:</label><br>
-                            <label><input type="checkbox" name="days" value="ПН" ${availability.days.includes('ПН')?'checked':''}>ПН</label>
+                                <label><input type="checkbox" name="days" value="ПН" ${availability.days.includes('ПН')?'checked':''}>ПН</label>
                                 <label><input type="checkbox" name="days" value="СР" ${availability.days.includes('СР')?'checked':''}>СР</label>
-                             <label><input type="checkbox" name="days" value="ПТ" ${availability.days.includes('ПТ')?'checked':''}>ПТ</label>
-                        </div>
-                            
-                            <label>Удобное время:</label>
+                                <label><input type="checkbox" name="days" value="ПТ" ${availability.days.includes('ПТ')?'checked':''}>ПТ</label>
+                            </div>
+                            <label>Время:</label>
                             <input type="text" name="time" value="${availability.time}" placeholder="18:00 - 20:00">
-                            
-                            <button type="submit">Сохранить</button>
+                          <button type="submit">Сохранить</button>
                         </form>
-
-                        <hr>
+                       <hr>
                         <form action="/post-comment" method="POST">
                             <input type="hidden" name="_csrf" value="${res.locals.csrfToken}">
                             <h3>Комментарий</h3>
@@ -257,7 +246,7 @@ export default (db) => {
                             <button type="submit" class="logout-btn">Выйти</button>
                         </form>
                         <a href="/activities">Активности</a>
-                        <a href="/work">Рабочий раздел</a>
+                        <a href="/work">Коктейль можно попить 🍹</a>
                     </div>
                 </body>
                 </html>
@@ -277,58 +266,23 @@ export default (db) => {
         } catch (error) { console.error(error); res.status(500).send('Ошибка.'); }
     });
 
-    // 4. СТРАНИЦА СПИСКА УЧАСТНИКОВ (Вот здесь всё отсвечивается!)
-    router.get('/activities/:activityName', async (req, res) => {
+   router.get('/activities/:activityName', async (req, res) => {
         try {
             res.set('Cache-Control', 'public, max-age=0, must-revalidate'); 
             const activityName = req.params.activityName;
             const participants = await db.collection('users').find({ activities: activityName }).toArray();
-
-            let participantsHtml = participants.map(p => {
-                const availability = p.availability || { days: [], time: '...' };
-                const daysString = availability.days.join(', ') || '...';
-                
-                // ПОКАЗЫВАЕМ ВСЕ ДАННЫЕ ВМЕСТЕ
-                return `
-                    <div class="participant-card">
-                        <h3>${p.name}</h3>
-                        <p>📞 <strong>Телефон:</strong> ${p.phone || 'Не указан'}</p>
-                        <p>🌍 <strong>Город/Страна:</strong> ${p.city || ''}, ${p.country || ''}</p>
-                        <p>📅 <strong>Время:</strong> ${daysString} | ${availability.time}</p>
-                    </div>
-                `;
-            }).join('');
-
-            if (participants.length === 0) participantsHtml = '<p>Пока никого нет.</p>';
-
-            res.send(` 
-                <!DOCTYPE html>
-                <html lang="ru">
-                <head>
-                    <meta charset="UTF-8"><title>${activityName}</title>
-                    <style>
-                        body { font-family: Arial; padding: 20px; background-color: #f4f4f4; }
-                        .container { max-width: 800px; margin: 0 auto; }
-                        .participant-card { background: white; padding: 20px; margin-bottom: 15px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-                        h1 { color: #0056b3; }
-                        h3 { margin-top: 0; color: #28a745; }
-                        a { color: #007BFF; text-decoration: none; font-weight: bold; }
-                    </style>
-                </head>
-                <body>
-                    <div class="container">
-                        <h1>Участники: ${activityName}</h1>
-                        ${participantsHtml}
-                        <br><a href="/login">На главную</a>
-                    </div>
-                </body>
-                </html>
-            `);
+            let html = participants.map(p => `
+                <div class="card">
+                    <h3>${p.name}</h3>
+                    <p>📞 ${p.phone || 'Нет'}</p>
+                    <p>🌍 ${p.city || ''} ${p.country || ''}</p>
+                    <p>📅 ${(p.availability?.days||[]).join(', ')} | ${p.availability?.time || ''}</p>
+                </div>`).join('') || '<p>Пусто</p>';
+            res.send(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${activityName}</title><style>body{font-family:Arial;padding:20px;background:#eee}.card{background:white;padding:15px;margin-bottom:10px;border-radius:5px}</style></head><body><h1>${activityName}</h1>${html}<br><a href="/login">Назад</a></body></html>`);
         } catch (error) { console.error(error); res.status(500).send('Ошибка.'); }
     });
 
-    // СОХРАНЕНИЕ КОММЕНТАРИЕВ
-    router.post("/post-comment", requireLogin, async (req, res) => {
+  router.post("/post-comment", requireLogin, async (req, res) => {
         try {
             await db.collection("comments").insertOne({ authorName: req.session.user.name, text: req.body.commentText, createdAt: new Date() });
             await clearCache(LOGIN_PAGE_CACHE_KEY);
@@ -336,8 +290,7 @@ export default (db) => {
         } catch (error) { console.error(error); res.status(500).send("Ошибка."); }
     });
 
-    // ВЫХОД
-    router.post("/logout", (req, res) => {
+ router.post("/logout", (req, res) => {
         req.session.destroy(() => { res.clearCookie('connect.sid'); res.redirect('/'); });
     });
 
