@@ -94,33 +94,34 @@ export default (db) => {
                 const readyDocs = await db.collection('ready_documents').find().sort({ completedAt: -1 }).toArray(); 
                 pageData = { 
                     comments, tasks, readyDocs,
+                    // Основные
                     chessCount: users.filter(u => u.activities?.includes("Шахматы")).length,
                     footballCount: users.filter(u => u.activities?.includes("Футбол")).length,
-                    danceCount: users.filter(u => u.activities?.includes("Танцы")).length
+                    danceCount: users.filter(u => u.activities?.includes("Танцы")).length,
+                    // Новые (Второй лист)
+                    hockeyCount: users.filter(u => u.activities?.includes("Хоккей")).length,
+                    volleyCount: users.filter(u => u.activities?.includes("Волейбол")).length,
+                    hikingCount: users.filter(u => u.activities?.includes("Походы")).length,
+                    travelCount: users.filter(u => u.activities?.includes("Путешествие")).length,
                 };
                 await setCache(LOGIN_PAGE_CACHE_KEY, pageData); 
             }
 
             let commentsHtml = pageData.comments.map(c => `<div class="comment"><b>${c.authorName}:</b> ${c.text}</div>`).join('');
             
-            // ГАЛЕРЕЯ "КОКТЕЙЛЬ"
+            // ГАЛЕРЕЯ
             let tasksHtml = `<div class="gallery-grid">` + pageData.tasks.map(t => {
                 const url = `/uploads/${t.fileName}`;
                 const content = isImage(t.fileName) 
                     ? `<img src="${url}" alt="${t.originalName}">`
                     : `<div class="file-icon">📄</div>`;
                 
-                // ✅ НОВАЯ ЛОГИКА СТАТУСОВ
-                let displayText = '';
+             let displayText = '';
                 let displayClass = '';
 
-                // 1. Если написана сумма - показываем только её
-                if (t.amount && t.amount.trim() !== '') {
-                    displayText = t.amount;
-                    displayClass = 'status-amount'; // Голубой цвет
-                } 
-                // 2. Иначе показываем стандартный статус
-                else {
+             if (t.amount && t.amount.trim() !== '') {
+                    displayText = t.amount; displayClass = 'status-amount';
+                } else {
                     if (t.status === 'free') { displayText = 'Свободна сегодня'; displayClass = 'status-free'; }
                     else if (t.status === 'company') { displayText = 'Ждем компанию'; displayClass = 'status-company'; }
                     else { displayText = 'Временно занята'; displayClass = 'status-busy'; }
@@ -141,10 +142,7 @@ export default (db) => {
                 const content = isImage(d.fileName) 
                     ? `<img src="${url}" alt="${d.originalName}">`
                     : `<div class="file-icon">✅</div>`;
-                
-                return `<a href="${url}" target="_blank" class="gallery-item ready-border" title="Выполнил: ${d.uploadedBy}">
-                            ${content}
-                        </a>`;
+                return `<a href="${url}" target="_blank" class="gallery-item ready-border" title="Выполнил: ${d.uploadedBy}">${content}</a>`;
             }).join('') + `</div>`;
 
             res.send(` 
@@ -158,7 +156,39 @@ export default (db) => {
                         body { font-family: Arial; background: url('/images/background.jpg') center/cover fixed; margin: 0; height: 100vh; overflow-y: scroll; }
 
                         .page-section { min-height: 100vh; width: 100%; scroll-snap-align: start; display: flex; justify-content: center; align-items: flex-start; padding-top: 40px; box-sizing: border-box; position: relative; }
-                        .second-page { background: rgba(0, 0, 0, 0.4); align-items: center; }
+                        
+                        /* СТИЛИ ДЛЯ ВТОРОГО ЛИСТА */
+                        .second-page { 
+                            background: rgba(0, 0, 0, 0.4); 
+                            display: flex; 
+                            flex-direction: column; 
+                            justify-content: center; 
+                            align-items: center; 
+                        }
+                        
+                        /* СТИЛИ НОВЫХ АКТИВНОСТЕЙ */
+                        .new-activities-wrapper { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; max-width: 800px; }
+                        .new-btn { 
+                            display: inline-block; padding: 15px 30px; 
+                            background: rgba(255,255,255,0.1); border: 2px solid white; color: white; 
+                            text-decoration: none; border-radius: 30px; font-size: 1.2em; transition: 0.3s;
+                        }
+                        .new-btn:hover { background: white; color: black; transform: scale(1.1); }
+                        
+                        /* ОСОБЫЙ СТИЛЬ ДЛЯ "ПУТЕШЕСТВИЕ" */
+                        .travel-link {
+                            font-family: 'Comic Sans MS', 'Brush Script MT', cursive; /* Рукописный стиль */
+                            font-size: 2em;
+                            color: #ffeb3b; /* Желтый цвет */
+                            text-decoration: none;
+                            transform: rotate(-5deg); /* Небольшой наклон */
+                            margin-left: 40px; /* Сдвиг в сторону */
+                            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+                            transition: 0.3s;
+                            display: inline-block;
+                        }
+                        .travel-link:hover { transform: rotate(0deg) scale(1.1); color: #fff; }
+
                         .scroll-hint { position: absolute; bottom: 20px; color: white; font-size: 24px; animation: bounce 2s infinite; opacity: 0.7; }
                         @keyframes bounce { 0%, 20%, 50%, 80%, 100% {transform: translateY(0);} 40% {transform: translateY(-10px);} 60% {transform: translateY(-5px);} }
 
@@ -177,12 +207,10 @@ export default (db) => {
                         .file-icon { font-size: 40px; }
                         
                         .status-label { font-size: 10px; text-align: center; margin-top: 4px; font-weight: bold; width: 100%; word-break: break-word; }
-                        
-                        /* ЦВЕТА СТАТУСОВ */
-                        .status-free { color: #28a745; } /* Зеленый */
-                        .status-company { color: #ffc107; } /* Оранжевый */
-                        .status-busy { color: #ccc; font-style: italic; } /* Серый */
-                        .status-amount { color: #00c3ff; font-size: 11px; } /* ✅ Голубой (для суммы) */
+                        .status-free { color: #28a745; } 
+                        .status-company { color: #ffc107; } 
+                        .status-busy { color: #ccc; font-style: italic; }
+                        .status-amount { color: #00c3ff; font-size: 11px; }
 
                         a.activity-btn { display: block; width: 100%; padding: 12px; margin-bottom: 10px; color: white; text-align: center; text-decoration: none; border-radius: 5px; box-sizing: border-box; font-weight: bold; border: 1px solid rgba(255,255,255,0.2); transition: 0.3s; }
                         .chess-btn { background-color: #6f42c1; } 
@@ -231,7 +259,18 @@ export default (db) => {
                     </div>
 
                     <div class="page-section second-page">
-                        <h2 style="color: rgba(255,255,255,0.3);">Второй лист (Пусто)</h2>
+                        <h2 style="color:white; margin-bottom:40px;">Активный отдых</h2>
+                        <div class="new-activities-wrapper">
+                            <a href="/activities/Хоккей" target="_blank" class="new-btn">🏒 Хоккей (${pageData.hockeyCount})</a>
+                            <a href="/activities/Волейбол" target="_blank" class="new-btn">🏐 Волейбол (${pageData.volleyCount})</a>
+                            <a href="/activities/Походы" target="_blank" class="new-btn">🥾 Походы (${pageData.hikingCount})</a>
+                        </div>
+                        
+                        <div style="margin-top: 60px;">
+                            <a href="/activities/Путешествие" target="_blank" class="travel-link">
+                                ✈️ Путешествие с тобой... (${pageData.travelCount})
+                            </a>
+                        </div>
                     </div>
 
                 </body>
@@ -306,7 +345,7 @@ export default (db) => {
                             <input type="hidden" name="_csrf" value="${res.locals.csrfToken}">
                             <button type="submit" class="logout-btn">Выйти</button>
                         </form>
-                        <a href="/activities">Активности</a>
+                        <a href="/activities">Активности (Запись)</a>
                         <a href="/work">Коктейль можно попить 🍹</a>
                     </div>
                 </body>
@@ -327,6 +366,7 @@ export default (db) => {
         } catch (error) { console.error(error); res.status(500).send('Ошибка.'); }
     });
 
+    // 4. СПИСОК АКТИВНОСТЕЙ (ОБНОВЛЕННЫЙ)
     router.get("/activities", requireLogin, async (req, res) => {
         try {
             res.set('Cache-Control', 'public, max-age=0, must-revalidate');  
@@ -338,41 +378,58 @@ export default (db) => {
                 userActivities = currentUser.activities || [];
             }
             
-            const chessCount = users.filter(u => u.activities?.includes("Шахматы")).length;
-            const footballCount = users.filter(u => u.activities?.includes("Футбол")).length;
-            const danceCount = users.filter(u => u.activities?.includes("Танцы")).length;
+            // Считаем участников
+            const counts = {
+                chess: users.filter(u => u.activities?.includes("Шахматы")).length,
+                football: users.filter(u => u.activities?.includes("Футбол")).length,
+                dance: users.filter(u => u.activities?.includes("Танцы")).length,
+                hockey: users.filter(u => u.activities?.includes("Хоккей")).length,
+                volley: users.filter(u => u.activities?.includes("Волейбол")).length,
+                hiking: users.filter(u => u.activities?.includes("Походы")).length,
+                travel: users.filter(u => u.activities?.includes("Путешествие")).length
+            };
             
+            // Функция генерации карточки
+            const renderCard = (name, count, label) => `
+                <div class="activity-card">
+                    <div class="activity-header"><span>${label || name}</span><span>Уч: ${count}</span></div>
+                    <form action="/update-activity" method="POST" style="display:inline;">
+                        <input type="hidden" name="_csrf" value="${res.locals.csrfToken}">
+                        <input type="hidden" name="activity" value="${name}">
+                        ${userActivities.includes(name) 
+                            ? `<button type="submit" name="action" value="leave" class="btn btn-leave">Отписаться</button>` 
+                            : `<button type="submit" name="action" value="join" class="btn btn-join">Записаться</button>`}
+                    </form>
+                </div>`;
+
             res.send(` 
                 <!DOCTYPE html><html lang="ru"><head><meta charset="UTF-8"><title>Активности</title>
                 <style>
                     body { font-family: Arial, sans-serif; padding: 20px; background-color: #f0f0f0; margin: 0; }
                     .tab-container { max-width: 600px; margin: 20px auto; }
                     .activity-card { padding: 15px; background-color: white; border: 1px solid #ddd; margin-bottom: 10px; border-radius: 8px; }
-                    .activity-header { display: flex; justify-content: space-between; align-items: center; font-size: 1.2em; font-weight: bold; }
+                    .activity-header { display: flex; justify-content: space-between; align-items: center; font-size: 1.2em; font-weight: bold; margin-bottom: 10px; }
                     .btn { padding: 8px 12px; border: none; border-radius: 5px; color: white; cursor: pointer; text-decoration: none; font-size: 1em;}
                     .btn-join { background-color: #28a745; } .btn-leave { background-color: #dc3545; }
                     a.back-link { color: #007BFF; text-decoration: none; font-weight: bold; }
+                    h3 { margin-top: 30px; border-bottom: 2px solid #ccc; padding-bottom: 5px; }
                 </style></head><body>
                 <div class="tab-container">
                     <h2>Доступные активности</h2>
-                    <div class="activity-card"><div class="activity-header"><span>Шахматы</span><span>Участников: ${chessCount}</span></div>
-                        <form action="/update-activity" method="POST" style="display:inline;">
-                        <input type="hidden" name="_csrf" value="${res.locals.csrfToken}">
-                        <input type="hidden" name="activity" value="Шахматы">
-                        ${userActivities.includes("Шахматы") ? `<button type="submit" name="action" value="leave" class="btn btn-leave">Отписаться</button>` : `<button type="submit" name="action" value="join" class="btn btn-join">Записаться</button>`}
-                        </form></div>
-                    <div class="activity-card"><div class="activity-header"><span>Футбол</span><span>Участников: ${footballCount}</span></div>
-                        <form action="/update-activity" method="POST" style="display:inline;">
-                        <input type="hidden" name="_csrf" value="${res.locals.csrfToken}">
-                        <input type="hidden" name="activity" value="Футбол">
-                        ${userActivities.includes("Футбол") ? `<button type="submit" name="action" value="leave" class="btn btn-leave">Отписаться</button>` : `<button type="submit" name="action" value="join" class="btn btn-join">Записаться</button>`}
-                        </form></div>
-                    <div class="activity-card"><div class="activity-header"><span>Танцы</span><span>Участников: ${danceCount}</span></div>
-                        <form action="/update-activity" method="POST" style="display:inline;">
-                        <input type="hidden" name="_csrf" value="${res.locals.csrfToken}">
-                        <input type="hidden" name="activity" value="Танцы">
-                        ${userActivities.includes("Танцы") ? `<button type="submit" name="action" value="leave" class="btn btn-leave">Отписаться</button>` : `<button type="submit" name="action" value="join" class="btn btn-join">Записаться</button>`}
-                        </form></div>
+                    
+                    <h3>Основные</h3>
+                    ${renderCard("Шахматы", counts.chess, "♟️ Шахматы")}
+                    ${renderCard("Футбол", counts.football, "⚽ Футбол")}
+                    ${renderCard("Танцы", counts.dance, "💃 Танцы")}
+                    
+                    <h3>Активный отдых (Новое)</h3>
+                    ${renderCard("Хоккей", counts.hockey, "🏒 Хоккей")}
+                    ${renderCard("Волейбол", counts.volley, "🏐 Волейбол")}
+                    ${renderCard("Походы", counts.hiking, "🥾 Походы")}
+                    
+                    <h3>Для души</h3>
+                    ${renderCard("Путешествие", counts.travel, "✈️ Путешествие с тобой")}
+
                     <br><a href="/profile" class="back-link">Вернуться в профиль</a>
                 </div></body></html>
             `);
@@ -447,19 +504,10 @@ export default (db) => {
                 <div class="container">
                     <h1>Политика конфиденциальности</h1>
                     <p>Последнее обновление: ${new Date().toLocaleDateString()}</p>
-                    
-                    <h2>1. Сбор информации</h2>
-                    <p>Мы собираем только ту информацию, которую вы предоставляете добровольно при регистрации: Имя, Email, а также данные профиля (Город, Страна, Телефон).</p>
-
-                    <h2>2. Использование информации</h2>
-                    <p>Информация используется для организации доступа к сервисам сайта, включая участие в активностях (Шахматы, Футбол, Танцы) и ведение рабочих задач.</p>
-
-                    <h2>3. Защита данных</h2>
-                    <p>Мы принимаем меры безопасности для защиты ваших данных. Пароли и личная информация хранятся в защищенной базе данных.</p>
-
-                    <h2>4. Передача третьим лицам</h2>
-                    <p>Мы не продаем, не обмениваем и не передаем вашу личную информацию посторонним лицам.</p>
-
+                    <h2>1. Сбор информации</h2><p>Только Имя и Email.</p>
+                    <h2>2. Использование</h2><p>Для доступа к сервисам.</p>
+                    <h2>3. Защита</h2><p>Данные в безопасности.</p>
+                    <h2>4. Передача</h2><p>Никому не передаем.</p>
                     <a href="/register" class="btn">Вернуться к регистрации</a>
                 </div>
             </body>
