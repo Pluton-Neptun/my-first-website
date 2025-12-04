@@ -16,8 +16,7 @@ function formatTime(ms) {
     return parts.join(' ');
 }
 
-// Функция для проверки, картинка это или нет
-function isImage(filename) {
+function isImage(filename) { 
     return filename.match(/\.(jpg|jpeg|png|gif|webp)$/i);
 }
 
@@ -104,20 +103,30 @@ export default (db) => {
 
             let commentsHtml = pageData.comments.map(c => `<div class="comment"><b>${c.authorName}:</b> ${c.text}</div>`).join('');
             
-            // --- ГЕНЕРАЦИЯ ГАЛЕРЕИ ДЛЯ "КОКТЕЙЛЬ" (БЫВШЕЕ В РАБОТЕ) ---
+            // --- ГЕНЕРАЦИЯ ГАЛЕРЕИ ДЛЯ "КОКТЕЙЛЬ" С НАДПИСЯМИ ---
             let tasksHtml = `<div class="gallery-grid">` + pageData.tasks.map(t => {
                 const url = `/uploads/${t.fileName}`;
-             const content = isImage(t.fileName) 
+                const content = isImage(t.fileName) 
                     ? `<img src="${url}" alt="${t.originalName}">`
                     : `<div class="file-icon">📄</div>`;
                 
-                return `<a href="${url}" target="_blank" class="gallery-item work-border" title="${t.originalName}">
+                // Определяем статус и цвет
+                let statusText = 'Временно занята';
+                let statusClass = 'status-busy';
+                if (t.status === 'free') { statusText = 'Свободна сегодня'; statusClass = 'status-free'; }
+                if (t.status === 'company') { statusText = 'Ждем компанию'; statusClass = 'status-company'; }
+
+                return `
+                    <div class="gallery-wrapper">
+                        <a href="${url}" target="_blank" class="gallery-item work-border" title="${t.originalName}">
                             ${content}
-                        </a>`;
+                        </a>
+                        <div class="status-label ${statusClass}">${statusText}</div>
+                    </div>
+                `;
             }).join('') + `</div>`;
 
-            // --- ГЕНЕРАЦИЯ ГАЛЕРЕИ ДЛЯ "ВЫПОЛНЕНО" ---
-            let completedHtml = `<div class="gallery-grid">` + pageData.readyDocs.map(d => {
+        let completedHtml = `<div class="gallery-grid">` + pageData.readyDocs.map(d => {
                 const url = `/uploads/${d.fileName}`;
                 const content = isImage(d.fileName) 
                     ? `<img src="${url}" alt="${d.originalName}">`
@@ -141,30 +150,35 @@ export default (db) => {
                         input, button { width: 95%; padding: 10px; margin-bottom: 10px; border-radius: 5px; box-sizing: border-box; }
                         button { background: #007BFF; color: white; border: none; cursor: pointer; width: 100%; font-size: 16px; }
                         
-                        /* СТИЛИ ДЛЯ ГАЛЕРЕИ (ФОТО) */
-                        .gallery-grid {
-                            display: flex;
-                            flex-wrap: wrap;
-                            gap: 8px;
-                            justify-content: flex-start;
-                        }
+                        /* СТИЛИ ДЛЯ ГАЛЕРЕИ */
+                        .gallery-grid { display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-start; }
+                        .gallery-wrapper { display: flex; flex-direction: column; align-items: center; width: 90px; } /* Обертка */
+                        
                         .gallery-item {
-                            width: 85px;  /* Маленький размер */
-                            height: 85px; /* Квадрат */
-                            display: block;
-                            overflow: hidden;
-                            border-radius: 5px;
+                            width: 85px; height: 85px; 
+                            display: flex; justify-content: center; align-items: center;
+                            overflow: hidden; border-radius: 5px; background: rgba(255,255,255,0.1);
                             transition: transform 0.2s;
-                            background: rgba(255,255,255,0.1);
-                            display: flex; justify-content: center; align-items: center; text-decoration: none;
-                        }
+                      }
                         .gallery-item img { width: 100%; height: 100%; object-fit: cover; }
                         .gallery-item:hover { transform: scale(1.1); z-index: 10; box-shadow: 0 0 10px rgba(255,255,255,0.5); }
                         .work-border { border: 2px solid orange; }
                         .ready-border { border: 2px solid #28a745; }
                         .file-icon { font-size: 40px; }
 
-                        /* КНОПКИ АКТИВНОСТЕЙ */
+                        /* СТИЛИ ДЛЯ НАДПИСИ ПОД ФОТО */
+                        .status-label {
+                            font-size: 10px;
+                            text-align: center;
+                            margin-top: 4px;
+                            font-weight: bold;
+                            line-height: 1.1;
+                            width: 100%;
+                        }
+                        .status-free { color: #28a745; } /* Зеленый */
+                        .status-company { color: #ffc107; } /* Желто-оранжевый */
+                        .status-busy { color: #ccc; font-style: italic; } /* Серый */
+
                         a.activity-btn { display: block; width: 100%; padding: 12px; margin-bottom: 10px; color: white; text-align: center; text-decoration: none; border-radius: 5px; box-sizing: border-box; font-weight: bold; border: 1px solid rgba(255,255,255,0.2); transition: 0.3s; }
                         .chess-btn { background-color: #6f42c1; } 
                         .foot-btn { background-color: #fd7e14; } 
@@ -329,44 +343,20 @@ export default (db) => {
         req.session.destroy(() => { res.clearCookie('connect.sid'); res.redirect('/'); });
     });
 
-    // ✅ ПОЛИТИКА КОНФИДЕНЦИАЛЬНОСТИ (ПОЛНАЯ ВЕРСИЯ)
-    router.get('/privacy-policy', (req, res) => {
+   router.get('/privacy-policy', (req, res) => {
         res.send(`
             <!DOCTYPE html>
             <html lang="ru">
             <head>
-                <meta charset="UTF-8">
-                <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <title>Политика конфиденциальности</title>
-                <style>
-                    body { font-family: Arial, sans-serif; padding: 20px; line-height: 1.6; background-color: #f4f4f4; color: #333; }
-                    .container { max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
-                    h1 { color: #2c3e50; }
-                    h2 { color: #34495e; margin-top: 20px; }
-                    p { margin-bottom: 15px; }
-                    a.btn { display: inline-block; background-color: #007BFF; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; margin-top: 20px; }
-                    a.btn:hover { background-color: #0056b3; }
-                </style>
+                <meta charset="UTF-8"><title>Политика</title>
+                <style>body{font-family:Arial;padding:20px;max-width:800px;margin:auto;background:#fff;color:#333}</style>
             </head>
             <body>
-                <div class="container">
-                    <h1>Политика конфиденциальности</h1>
-                    <p>Последнее обновление: ${new Date().toLocaleDateString()}</p>
-                    
-                    <h2>1. Сбор информации</h2>
-                    <p>Мы собираем только ту информацию, которую вы предоставляете добровольно при регистрации: Имя, Email, а также данные профиля (Город, Страна, Телефон).</p>
-
-                    <h2>2. Использование информации</h2>
-                    <p>Информация используется для организации доступа к сервисам сайта, включая участие в активностях (Шахматы, Футбол, Танцы) и ведение рабочих задач.</p>
-
-                    <h2>3. Защита данных</h2>
-                    <p>Мы принимаем меры безопасности для защиты ваших данных. Пароли и личная информация хранятся в защищенной базе данных.</p>
-
-                    <h2>4. Передача третьим лицам</h2>
-                    <p>Мы не продаем, не обмениваем и не передаем вашу личную информацию посторонним лицам.</p>
-
-                    <a href="/register" class="btn">Вернуться к регистрации</a>
-                </div>
+                <h1>Политика конфиденциальности</h1>
+                <p>Мы защищаем ваши данные. Мы не передаем их третьим лицам.</p>
+                <h2>1. Сбор информации</h2><p>Только необходимое: Имя, Email.</p>
+                <h2>2. Использование</h2><p>Для работы сервиса.</p>
+                <a href="/register">Вернуться</a>
             </body>
             </html>
         `);

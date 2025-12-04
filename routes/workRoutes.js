@@ -41,7 +41,13 @@ export default (db, upload) => {
                   button { padding: 8px 12px; border: none; border-radius: 5px; color: white; cursor: pointer; margin-left: 10px; }
                   .delete-btn { background-color: #dc3545; }
                   form button { background-color: #ff9800; width: 100%; margin-top: 10px; padding: 12px; margin-left: 0; }
-                  form input { width: 100%; box-sizing: border-box; padding: 10px; border-radius: 5px; border: 1px solid #ccc; }
+                  form input[type="file"] { width: 100%; box-sizing: border-box; padding: 10px; border-radius: 5px; border: 1px solid #ccc; margin-bottom: 10px; }
+                  
+                  /* Стиль для выбора статуса */
+                  .status-group { margin: 15px 0; background: rgba(255,255,255,0.1); padding: 10px; border-radius: 5px; }
+                  .status-group label { display: block; margin-bottom: 5px; cursor: pointer; }
+                  .status-group input { margin-right: 10px; }
+
                   a.btn-back { display: block; background-color: #6c757d; color: white; text-align: center; padding: 10px; text-decoration: none; border-radius: 5px; margin-top: 20px; }
                 </style>
             </head>
@@ -57,6 +63,14 @@ export default (db, upload) => {
                       <h2>Загрузить новый файл</h2>
                       <form id="upload-form" enctype="multipart/form-data">
                           <input type="file" name="document" required>
+                          
+                          <div class="status-group">
+                              <p style="margin-top:0">Выберите статус (необязательно):</p>
+                              <label><input type="radio" name="status" value="free"> Свободна сегодня</label>
+                              <label><input type="radio" name="status" value="company"> Ждем компанию</label>
+                              <small style="color:#ccc">Если не выбрать, будет "Временно занята"</small>
+                          </div>
+
                           <button type="submit">Загрузить</button>
                       </form>
                       <h3 style="margin-top: 30px;">Список файлов:</h3>
@@ -80,17 +94,25 @@ export default (db, upload) => {
         `);
     });
 
-    // 2. ЗАГРУЗКА (Теперь возвращает JSON, а не редирект)
+    // 2. ЗАГРУЗКА (С сохранением статуса)
     router.post('/upload', requireLogin, upload.single('document'), async (req, res) => {
         try {
             if (!req.file) return res.status(400).json({ error: 'Нет файла.' });
+            
+            // Получаем статус из формы. Если пусто -> 'busy'
+            const status = req.body.status || 'busy';
+
             await db.collection('tasks').insertOne({
-                originalName: req.file.originalname, fileName: req.file.filename, path: req.file.path,
-                uploadedBy: req.session.user.name, userId: ObjectId.createFromHexString(req.session.user._id), createdAt: new Date()
+                originalName: req.file.originalname, 
+                fileName: req.file.filename, 
+                path: req.file.path,
+                uploadedBy: req.session.user.name, 
+                userId: ObjectId.createFromHexString(req.session.user._id), 
+                status: status, // ✅ Сохраняем статус
+                createdAt: new Date()
             });
             await clearCache(LOGIN_PAGE_CACHE_KEY); 
-            // ✅ Исправлено: Возвращаем JSON
-            res.json({ status: 'ok' });
+          res.json({ status: 'ok' });
         } catch (error) { console.error(error); res.status(500).json({ error: 'Ошибка сервера' }); }
     });
 
@@ -103,16 +125,14 @@ export default (db, upload) => {
                 createdAt: new Date(), completedAt: new Date()
             });
             await clearCache(LOGIN_PAGE_CACHE_KEY); 
-            // ✅ Исправлено: Возвращаем JSON
-            res.json({ status: 'ok' });
+         res.json({ status: 'ok' });
         } catch (error) { console.error(error); res.status(500).json({ error: 'Ошибка сервера' }); }
     }); 
 
-    // 3. СПИСКИ (Теперь запрещено кэширование)
+    // 3. СПИСКИ
     router.get('/tasks', requireLogin, async (req, res) => { 
         try {
-            // ✅ ВАЖНО: Запрещаем кэш, чтобы список всегда обновлялся
-            res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+          res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
             const tasks = await db.collection('tasks').find().sort({ createdAt: -1 }).toArray(); 
             res.json(tasks);
         } catch (error) { res.status(500).json({ message: "Ошибка." }); }
@@ -120,8 +140,7 @@ export default (db, upload) => {
 
     router.get('/ready-documents', requireLogin, async (req, res) => { 
         try {
-            // ✅ ВАЖНО: Запрещаем кэш
-            res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+         res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
             const documents = await db.collection('ready_documents').find().sort({ completedAt: -1 }).toArray();   
             res.json(documents);
         } catch (error) { res.status(500).json({ message: "Ошибка." }); }
@@ -142,7 +161,7 @@ export default (db, upload) => {
         } catch (error) { console.error(error); res.status(500).send('Ошибка'); }
     });
 
- router.delete('/ready-documents/:id', requireLogin, async (req, res) => {
+    router.delete('/ready-documents/:id', requireLogin, async (req, res) => {
         try {
             const docId = req.params.id;
             const doc = await db.collection('ready_documents').findOne({ _id: ObjectId.createFromHexString(docId) });
