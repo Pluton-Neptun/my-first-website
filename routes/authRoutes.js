@@ -298,5 +298,52 @@ export default (db) => {
         req.session.destroy(() => { res.clearCookie('connect.sid'); res.redirect('/'); });
     });
 
+// --- ДОБАВИТЬ ЭТОТ БЛОК ПЕРЕД return router; ---
+
+    // ПОЛИТИКА КОНФИДЕНЦИАЛЬНОСТИ
+    router.get('/privacy-policy', (req, res) => {
+        res.send(`
+            <!DOCTYPE html>
+            <html lang="ru">
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>Политика конфиденциальности</title>
+                <style>
+                    body { font-family: Arial, sans-serif; padding: 20px; line-height: 1.6; background-color: #f4f4f4; color: #333; }
+                    .container { max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+                    h1 { color: #2c3e50; }
+                    h2 { color: #34495e; margin-top: 20px; }
+                    p { margin-bottom: 15px; }
+                    a.btn { display: inline-block; background-color: #007BFF; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; margin-top: 20px; }
+                    a.btn:hover { background-color: #0056b3; }
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <h1>Политика конфиденциальности</h1>
+                    <p>Последнее обновление: ${new Date().toLocaleDateString()}</p>
+                    
+                    <h2>1. Сбор информации</h2>
+                    <p>Мы собираем только ту информацию, которую вы предоставляете добровольно при регистрации: Имя, Email, а также данные профиля (Город, Страна, Телефон).</p>
+
+                    <h2>2. Использование информации</h2>
+                    <p>Информация используется для организации доступа к сервисам сайта, включая участие в активностях (Шахматы, Футбол, Танцы) и ведение рабочих задач.</p>
+
+                    <h2>3. Защита данных</h2>
+                    <p>Мы принимаем меры безопасности для защиты ваших данных. Пароли и личная информация хранятся в защищенной базе данных.</p>
+
+                    <h2>4. Передача третьим лицам</h2>
+                    <p>Мы не продаем, не обмениваем и не передаем вашу личную информацию посторонним лицам.</p>
+
+                    <a href="/register" class="btn">Вернуться к регистрации</a>
+                </div>
+            </body>
+            </html>
+        `);
+    });
+
+
+
     return router;
 };
