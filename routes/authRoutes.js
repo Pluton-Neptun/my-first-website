@@ -5,6 +5,7 @@ import { setCache, getCache, clearCache, LOGIN_PAGE_CACHE_KEY } from '../cacheSe
 
 const __dirname = path.resolve();
 
+// --- Вспомогательные функции ---
 function formatTime(ms) {
     const seconds = Math.floor((ms / 1000) % 60);
     const minutes = Math.floor((ms / (1000 * 60)) % 60);
@@ -16,7 +17,7 @@ function formatTime(ms) {
     return parts.join(' ');
 }
 
-function isImage(filename) { 
+function isImage(filename) {
     return filename.match(/\.(jpg|jpeg|png|gif|webp)$/i);
 }
 
@@ -82,7 +83,7 @@ export default (db) => {
         } catch (error) { console.error(error); res.status(500).send("Ошибка."); }
     });
 
-    // 2. СТРАНИЦА ВХОДА
+    // 2. ГЛАВНАЯ (ВХОД) С ГАЛЕРЕЕЙ
     router.get("/login", async (req, res) => {
         try {
             res.set('Cache-Control', 'public, max-age=0, must-revalidate'); 
@@ -103,15 +104,14 @@ export default (db) => {
 
             let commentsHtml = pageData.comments.map(c => `<div class="comment"><b>${c.authorName}:</b> ${c.text}</div>`).join('');
             
-            // --- ГЕНЕРАЦИЯ ГАЛЕРЕИ ДЛЯ "КОКТЕЙЛЬ" С НАДПИСЯМИ ---
+            // ГАЛЕРЕЯ "КОКТЕЙЛЬ"
             let tasksHtml = `<div class="gallery-grid">` + pageData.tasks.map(t => {
                 const url = `/uploads/${t.fileName}`;
                 const content = isImage(t.fileName) 
                     ? `<img src="${url}" alt="${t.originalName}">`
                     : `<div class="file-icon">📄</div>`;
                 
-                // Определяем статус и цвет
-                let statusText = 'Временно занята';
+             let statusText = 'Временно занята';
                 let statusClass = 'status-busy';
                 if (t.status === 'free') { statusText = 'Свободна сегодня'; statusClass = 'status-free'; }
                 if (t.status === 'company') { statusText = 'Ждем компанию'; statusClass = 'status-company'; }
@@ -126,7 +126,8 @@ export default (db) => {
                 `;
             }).join('') + `</div>`;
 
-        let completedHtml = `<div class="gallery-grid">` + pageData.readyDocs.map(d => {
+            // ГАЛЕРЕЯ "ВЫПОЛНЕНО"
+            let completedHtml = `<div class="gallery-grid">` + pageData.readyDocs.map(d => {
                 const url = `/uploads/${d.fileName}`;
                 const content = isImage(d.fileName) 
                     ? `<img src="${url}" alt="${d.originalName}">`
@@ -149,35 +150,25 @@ export default (db) => {
                         .block { background: rgba(0,0,0,0.7); color: white; padding: 20px; border-radius: 8px; width: 320px; margin-bottom: 20px; }
                         input, button { width: 95%; padding: 10px; margin-bottom: 10px; border-radius: 5px; box-sizing: border-box; }
                         button { background: #007BFF; color: white; border: none; cursor: pointer; width: 100%; font-size: 16px; }
-                        
-                        /* СТИЛИ ДЛЯ ГАЛЕРЕИ */
+                      
                         .gallery-grid { display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-start; }
-                        .gallery-wrapper { display: flex; flex-direction: column; align-items: center; width: 90px; } /* Обертка */
-                        
+                        .gallery-wrapper { display: flex; flex-direction: column; align-items: center; width: 90px; }
                         .gallery-item {
                             width: 85px; height: 85px; 
                             display: flex; justify-content: center; align-items: center;
                             overflow: hidden; border-radius: 5px; background: rgba(255,255,255,0.1);
                             transition: transform 0.2s;
-                      }
+                        }
                         .gallery-item img { width: 100%; height: 100%; object-fit: cover; }
                         .gallery-item:hover { transform: scale(1.1); z-index: 10; box-shadow: 0 0 10px rgba(255,255,255,0.5); }
                         .work-border { border: 2px solid orange; }
                         .ready-border { border: 2px solid #28a745; }
                         .file-icon { font-size: 40px; }
-
-                        /* СТИЛИ ДЛЯ НАДПИСИ ПОД ФОТО */
-                        .status-label {
-                            font-size: 10px;
-                            text-align: center;
-                            margin-top: 4px;
-                            font-weight: bold;
-                            line-height: 1.1;
-                            width: 100%;
-                        }
-                        .status-free { color: #28a745; } /* Зеленый */
-                        .status-company { color: #ffc107; } /* Желто-оранжевый */
-                        .status-busy { color: #ccc; font-style: italic; } /* Серый */
+                        
+                        .status-label { font-size: 10px; text-align: center; margin-top: 4px; font-weight: bold; width: 100%; }
+                        .status-free { color: #28a745; } 
+                        .status-company { color: #ffc107; } 
+                        .status-busy { color: #ccc; font-style: italic; }
 
                         a.activity-btn { display: block; width: 100%; padding: 12px; margin-bottom: 10px; color: white; text-align: center; text-decoration: none; border-radius: 5px; box-sizing: border-box; font-weight: bold; border: 1px solid rgba(255,255,255,0.2); transition: 0.3s; }
                         .chess-btn { background-color: #6f42c1; } 
@@ -315,6 +306,79 @@ export default (db) => {
         } catch (error) { console.error(error); res.status(500).send('Ошибка.'); }
     });
 
+    // 4. ✅ ВОТ ЭТОТ БЛОК БЫЛ УТЕРЯН — ВОЗВРАЩАЕМ СПИСОК АКТИВНОСТЕЙ
+    router.get("/activities", requireLogin, async (req, res) => {
+        try {
+            res.set('Cache-Control', 'public, max-age=0, must-revalidate');  
+            const users = await db.collection("users").find().toArray();
+            let userActivities = [];
+            
+            const currentUser = await db.collection("users").findOne({ _id: ObjectId.createFromHexString(req.session.user._id) });
+            if (currentUser) {
+                userActivities = currentUser.activities || [];
+            }
+            
+            const chessCount = users.filter(u => u.activities?.includes("Шахматы")).length;
+            const footballCount = users.filter(u => u.activities?.includes("Футбол")).length;
+            const danceCount = users.filter(u => u.activities?.includes("Танцы")).length;
+            
+            res.send(` 
+                <!DOCTYPE html><html lang="ru"><head><meta charset="UTF-8"><title>Активности</title>
+                <style>
+                    body { font-family: Arial, sans-serif; padding: 20px; background-color: #f0f0f0; margin: 0; }
+                    .tab-container { max-width: 600px; margin: 20px auto; }
+                    .activity-card { padding: 15px; background-color: white; border: 1px solid #ddd; margin-bottom: 10px; border-radius: 8px; }
+                    .activity-header { display: flex; justify-content: space-between; align-items: center; font-size: 1.2em; font-weight: bold; }
+                    .btn { padding: 8px 12px; border: none; border-radius: 5px; color: white; cursor: pointer; text-decoration: none; font-size: 1em;}
+                    .btn-join { background-color: #28a745; } .btn-leave { background-color: #dc3545; }
+                    a.back-link { color: #007BFF; text-decoration: none; font-weight: bold; }
+                </style></head><body>
+                <div class="tab-container">
+                    <h2>Доступные активности</h2>
+                    <div class="activity-card"><div class="activity-header"><span>Шахматы</span><span>Участников: ${chessCount}</span></div>
+                        <form action="/update-activity" method="POST" style="display:inline;">
+                        <input type="hidden" name="_csrf" value="${res.locals.csrfToken}">
+                        <input type="hidden" name="activity" value="Шахматы">
+                        ${userActivities.includes("Шахматы") ? `<button type="submit" name="action" value="leave" class="btn btn-leave">Отписаться</button>` : `<button type="submit" name="action" value="join" class="btn btn-join">Записаться</button>`}
+                        </form></div>
+                    <div class="activity-card"><div class="activity-header"><span>Футбол</span><span>Участников: ${footballCount}</span></div>
+                        <form action="/update-activity" method="POST" style="display:inline;">
+                        <input type="hidden" name="_csrf" value="${res.locals.csrfToken}">
+                        <input type="hidden" name="activity" value="Футбол">
+                        ${userActivities.includes("Футбол") ? `<button type="submit" name="action" value="leave" class="btn btn-leave">Отписаться</button>` : `<button type="submit" name="action" value="join" class="btn btn-join">Записаться</button>`}
+                        </form></div>
+                    <div class="activity-card"><div class="activity-header"><span>Танцы</span><span>Участников: ${danceCount}</span></div>
+                        <form action="/update-activity" method="POST" style="display:inline;">
+                        <input type="hidden" name="_csrf" value="${res.locals.csrfToken}">
+                        <input type="hidden" name="activity" value="Танцы">
+                        ${userActivities.includes("Танцы") ? `<button type="submit" name="action" value="leave" class="btn btn-leave">Отписаться</button>` : `<button type="submit" name="action" value="join" class="btn btn-join">Записаться</button>`}
+                        </form></div>
+                    <br><a href="/profile" class="back-link">Вернуться в профиль</a>
+                </div></body></html>
+            `);
+        } catch(error) { console.error(error); res.status(500).send("Ошибка."); }
+    });
+
+    // 5. ЛОГИКА ЗАПИСИ НА АКТИВНОСТИ
+    router.post("/update-activity", requireLogin, async (req, res) => {
+        try {
+            const { activity, action } = req.body;
+            const userId = ObjectId.createFromHexString(req.session.user._id);
+            let updateQuery;
+            if (action === "join") updateQuery = { $addToSet: { activities: activity } };
+            else if (action === "leave") updateQuery = { $pull: { activities: activity } };
+            
+            if (updateQuery) {
+                await db.collection("users").updateOne({ _id: userId }, updateQuery);
+                // Обновляем сессию
+                const updatedUser = await db.collection("users").findOne({ _id: userId });
+                req.session.user.activities = updatedUser.activities;
+            }
+            await clearCache(LOGIN_PAGE_CACHE_KEY);  
+            res.redirect("/activities");
+        } catch (error) { console.error(error); res.status(500).send("Ошибка."); }
+    });
+
     router.get('/activities/:activityName', async (req, res) => {
         try {
             res.set('Cache-Control', 'public, max-age=0, must-revalidate'); 
@@ -343,20 +407,44 @@ export default (db) => {
         req.session.destroy(() => { res.clearCookie('connect.sid'); res.redirect('/'); });
     });
 
-   router.get('/privacy-policy', (req, res) => {
+    // ✅ ПОЛИТИКА КОНФИДЕНЦИАЛЬНОСТИ (ПОЛНАЯ ВЕРСИЯ)
+    router.get('/privacy-policy', (req, res) => {
         res.send(`
             <!DOCTYPE html>
             <html lang="ru">
             <head>
-                <meta charset="UTF-8"><title>Политика</title>
-                <style>body{font-family:Arial;padding:20px;max-width:800px;margin:auto;background:#fff;color:#333}</style>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>Политика конфиденциальности</title>
+                <style>
+                    body { font-family: Arial, sans-serif; padding: 20px; line-height: 1.6; background-color: #f4f4f4; color: #333; }
+                    .container { max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+                    h1 { color: #2c3e50; }
+                    h2 { color: #34495e; margin-top: 20px; }
+                    p { margin-bottom: 15px; }
+                    a.btn { display: inline-block; background-color: #007BFF; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; margin-top: 20px; }
+                    a.btn:hover { background-color: #0056b3; }
+                </style>
             </head>
             <body>
-                <h1>Политика конфиденциальности</h1>
-                <p>Мы защищаем ваши данные. Мы не передаем их третьим лицам.</p>
-                <h2>1. Сбор информации</h2><p>Только необходимое: Имя, Email.</p>
-                <h2>2. Использование</h2><p>Для работы сервиса.</p>
-                <a href="/register">Вернуться</a>
+                <div class="container">
+                    <h1>Политика конфиденциальности</h1>
+                    <p>Последнее обновление: ${new Date().toLocaleDateString()}</p>
+                    
+                    <h2>1. Сбор информации</h2>
+                    <p>Мы собираем только ту информацию, которую вы предоставляете добровольно при регистрации: Имя, Email, а также данные профиля (Город, Страна, Телефон).</p>
+
+                    <h2>2. Использование информации</h2>
+                    <p>Информация используется для организации доступа к сервисам сайта, включая участие в активностях (Шахматы, Футбол, Танцы) и ведение рабочих задач.</p>
+
+                    <h2>3. Защита данных</h2>
+                    <p>Мы принимаем меры безопасности для защиты ваших данных. Пароли и личная информация хранятся в защищенной базе данных.</p>
+
+                    <h2>4. Передача третьим лицам</h2>
+                    <p>Мы не продаем, не обмениваем и не передаем вашу личную информацию посторонним лицам.</p>
+
+                    <a href="/register" class="btn">Вернуться к регистрации</a>
+                </div>
             </body>
             </html>
         `);
