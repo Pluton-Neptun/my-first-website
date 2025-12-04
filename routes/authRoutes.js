@@ -104,11 +104,10 @@ export default (db) => {
 
             let commentsHtml = pageData.comments.map(c => `<div class="comment"><b>${c.authorName}:</b> ${c.text}</div>`).join('');
             
-            // --- ГЕНЕРАЦИЯ ГАЛЕРЕИ ДЛЯ "В РАБОТЕ" ---
+            // --- ГЕНЕРАЦИЯ ГАЛЕРЕИ ДЛЯ "КОКТЕЙЛЬ" (БЫВШЕЕ В РАБОТЕ) ---
             let tasksHtml = `<div class="gallery-grid">` + pageData.tasks.map(t => {
                 const url = `/uploads/${t.fileName}`;
-                // Если картинка - показываем фото, если нет - иконку
-                const content = isImage(t.fileName) 
+             const content = isImage(t.fileName) 
                     ? `<img src="${url}" alt="${t.originalName}">`
                     : `<div class="file-icon">📄</div>`;
                 
@@ -159,24 +158,14 @@ export default (db) => {
                             background: rgba(255,255,255,0.1);
                             display: flex; justify-content: center; align-items: center; text-decoration: none;
                         }
-                        .gallery-item img {
-                            width: 100%;
-                            height: 100%;
-                            object-fit: cover; /* Заполняет квадрат, обрезая лишнее */
-                        }
-                        .gallery-item:hover {
-                            transform: scale(1.1); /* Увеличение при наведении */
-                            z-index: 10;
-                            box-shadow: 0 0 10px rgba(255,255,255,0.5);
-                        }
+                        .gallery-item img { width: 100%; height: 100%; object-fit: cover; }
+                        .gallery-item:hover { transform: scale(1.1); z-index: 10; box-shadow: 0 0 10px rgba(255,255,255,0.5); }
                         .work-border { border: 2px solid orange; }
                         .ready-border { border: 2px solid #28a745; }
                         .file-icon { font-size: 40px; }
 
                         /* КНОПКИ АКТИВНОСТЕЙ */
-                        a.activity-btn { 
-                            display: block; width: 100%; padding: 12px; margin-bottom: 10px; color: white; text-align: center; text-decoration: none; border-radius: 5px; box-sizing: border-box; font-weight: bold; border: 1px solid rgba(255,255,255,0.2); transition: 0.3s;
-                        }
+                        a.activity-btn { display: block; width: 100%; padding: 12px; margin-bottom: 10px; color: white; text-align: center; text-decoration: none; border-radius: 5px; box-sizing: border-box; font-weight: bold; border: 1px solid rgba(255,255,255,0.2); transition: 0.3s; }
                         .chess-btn { background-color: #6f42c1; } 
                         .foot-btn { background-color: #fd7e14; } 
                         .dance-btn { background-color: #e83e8c; } 
@@ -185,7 +174,7 @@ export default (db) => {
                         .comment { background: rgba(255,255,255,0.1); padding: 5px; margin-bottom: 5px; }
                         a.link { color: #6cafff; display: block; text-align: center; margin-top: 10px; }
                         h2, h3 { text-align: center; margin-top: 0; }
-                     </style>
+                    </style>
                 </head>
                 <body>
                     <div class="main-wrapper">
@@ -210,8 +199,8 @@ export default (db) => {
                             ${commentsHtml || "<p>Пусто</p>"}
                         </div>
                         <div class="block">
-                            <h3>В работе (Галерея)</h3>
-                            ${tasksHtml || "<p>Нет задач</p>"}
+                            <h3>🍹 Коктейль (Галерея)</h3>
+                            ${tasksHtml || "<p>Нет загрузок</p>"}
                         </div>
                          <div class="block">
                             <h3>Выполнено (Галерея)</h3>
@@ -338,25 +327,50 @@ export default (db) => {
 
     router.post("/logout", (req, res) => {
         req.session.destroy(() => { res.clearCookie('connect.sid'); res.redirect('/'); });
-    }); 
+    });
 
-    // ПОЛИТИКА КОНФИДЕНЦИАЛЬНОСТИ 
+    // ✅ ПОЛИТИКА КОНФИДЕНЦИАЛЬНОСТИ (ПОЛНАЯ ВЕРСИЯ)
     router.get('/privacy-policy', (req, res) => {
         res.send(`
             <!DOCTYPE html>
             <html lang="ru">
             <head>
-                <meta charset="UTF-8"><title>Политика</title>
-                <style>body{font-family:Arial;padding:20px;max-width:800px;margin:auto;background:#fff;color:#333}</style>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>Политика конфиденциальности</title>
+                <style>
+                    body { font-family: Arial, sans-serif; padding: 20px; line-height: 1.6; background-color: #f4f4f4; color: #333; }
+                    .container { max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+                    h1 { color: #2c3e50; }
+                    h2 { color: #34495e; margin-top: 20px; }
+                    p { margin-bottom: 15px; }
+                    a.btn { display: inline-block; background-color: #007BFF; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; margin-top: 20px; }
+                    a.btn:hover { background-color: #0056b3; }
+                </style>
             </head>
             <body>
-                <h1>Политика конфиденциальности</h1>
-                <p>Мы защищаем ваши данные. Мы не передаем их третьим лицам.</p>
-                <a href="/register">Вернуться</a>
+                <div class="container">
+                    <h1>Политика конфиденциальности</h1>
+                    <p>Последнее обновление: ${new Date().toLocaleDateString()}</p>
+                    
+                    <h2>1. Сбор информации</h2>
+                    <p>Мы собираем только ту информацию, которую вы предоставляете добровольно при регистрации: Имя, Email, а также данные профиля (Город, Страна, Телефон).</p>
+
+                    <h2>2. Использование информации</h2>
+                    <p>Информация используется для организации доступа к сервисам сайта, включая участие в активностях (Шахматы, Футбол, Танцы) и ведение рабочих задач.</p>
+
+                    <h2>3. Защита данных</h2>
+                    <p>Мы принимаем меры безопасности для защиты ваших данных. Пароли и личная информация хранятся в защищенной базе данных.</p>
+
+                    <h2>4. Передача третьим лицам</h2>
+                    <p>Мы не продаем, не обмениваем и не передаем вашу личную информацию посторонним лицам.</p>
+
+                    <a href="/register" class="btn">Вернуться к регистрации</a>
+                </div>
             </body>
             </html>
         `);
-    }); 
+    });
 
     return router;
 };
