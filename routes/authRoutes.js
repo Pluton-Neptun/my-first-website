@@ -5,8 +5,7 @@ import { setCache, getCache, clearCache, LOGIN_PAGE_CACHE_KEY } from '../cacheSe
 
 const __dirname = path.resolve();
 
-// --- Вспомогательные функции ---
-function formatTime(ms) {
+function formatTime(ms) { 
     const seconds = Math.floor((ms / 1000) % 60);
     const minutes = Math.floor((ms / (1000 * 60)) % 60);
     const hours = Math.floor((ms / (1000 * 60 * 60)));
@@ -83,7 +82,7 @@ export default (db) => {
         } catch (error) { console.error(error); res.status(500).send("Ошибка."); }
     });
 
-    // 2. ГЛАВНАЯ (ВХОД) - ТЕПЕРЬ С ДВУМЯ ЛИСТАМИ
+    // 2. ГЛАВНАЯ
     router.get("/login", async (req, res) => {
         try {
             res.set('Cache-Control', 'public, max-age=0, must-revalidate'); 
@@ -115,19 +114,21 @@ export default (db) => {
                 let statusClass = 'status-busy';
                 if (t.status === 'free') { statusText = 'Свободна сегодня'; statusClass = 'status-free'; }
                 if (t.status === 'company') { statusText = 'Ждем компанию'; statusClass = 'status-company'; }
+                
+                // ✅ ДОБАВЛЯЕМ СУММУ, ЕСЛИ ОНА ЕСТЬ
+                let amountHtml = t.amount ? `<br><span style="color:#fff; font-weight:normal;">(до ${t.amount})</span>` : '';
 
                 return `
                     <div class="gallery-wrapper">
                         <a href="${url}" target="_blank" class="gallery-item work-border" title="${t.originalName}">
                             ${content}
                         </a>
-                        <div class="status-label ${statusClass}">${statusText}</div>
+                        <div class="status-label ${statusClass}">${statusText}${amountHtml}</div>
                     </div>
                 `;
             }).join('') + `</div>`;
 
-            // ГАЛЕРЕЯ "ВЫПОЛНЕНО"
-            let completedHtml = `<div class="gallery-grid">` + pageData.readyDocs.map(d => {
+           let completedHtml = `<div class="gallery-grid">` + pageData.readyDocs.map(d => {
                 const url = `/uploads/${d.fileName}`;
                 const content = isImage(d.fileName) 
                     ? `<img src="${url}" alt="${d.originalName}">`
@@ -145,67 +146,22 @@ export default (db) => {
                     <meta charset="UTF-8"><title>Вход</title>
                     <script src="/ga.js"></script>
                     <style>
-                        /* --- НАСТРОЙКА ПЕРЕЛИСТЫВАНИЯ (SCROLL SNAP) --- */
-                        html {
-                            scroll-snap-type: y mandatory; /* Включаем "прилипание" по вертикали */
-                        }
-                        body { 
-                            font-family: Arial; 
-                            background: url('/images/background.jpg') center/cover fixed; 
-                            margin: 0; 
-                            height: 100vh; 
-                            overflow-y: scroll;
-                        }
+                        html { scroll-snap-type: y mandatory; }
+                        body { font-family: Arial; background: url('/images/background.jpg') center/cover fixed; margin: 0; height: 100vh; overflow-y: scroll; }
 
-                        /* КАЖДЫЙ ЛИСТ - ЭТО СЕКЦИЯ */
-                        .page-section {
-                            min-height: 100vh; /* Высота во весь экран */
-                            width: 100%;
-                            scroll-snap-align: start; /* Прилипать к началу секции */
-                            display: flex;
-                            justify-content: center;
-                            align-items: flex-start; /* Контент сверху */
-                            padding-top: 40px;
-                            box-sizing: border-box;
-                            position: relative;
-                        }
+                        .page-section { min-height: 100vh; width: 100%; scroll-snap-align: start; display: flex; justify-content: center; align-items: flex-start; padding-top: 40px; box-sizing: border-box; position: relative; }
+                        .second-page { background: rgba(0, 0, 0, 0.4); align-items: center; }
+                        .scroll-hint { position: absolute; bottom: 20px; color: white; font-size: 24px; animation: bounce 2s infinite; opacity: 0.7; }
+                        @keyframes bounce { 0%, 20%, 50%, 80%, 100% {transform: translateY(0);} 40% {transform: translateY(-10px);} 60% {transform: translateY(-5px);} }
 
-                        /* ВТОРОЙ ЛИСТ */
-                        .second-page {
-                            /* Можно сделать чуть темнее, чтобы отличать */
-                            background: rgba(0, 0, 0, 0.4); 
-                            align-items: center; /* Центрируем текст на втором листе */
-                        }
-
-                        /* Стрелка вниз */
-                        .scroll-hint {
-                            position: absolute;
-                            bottom: 20px;
-                            color: white;
-                            font-size: 24px;
-                            animation: bounce 2s infinite;
-                            opacity: 0.7;
-                        }
-                        @keyframes bounce {
-                            0%, 20%, 50%, 80%, 100% {transform: translateY(0);}
-                            40% {transform: translateY(-10px);}
-                            60% {transform: translateY(-5px);}
-                        }
-
-                        /* --- СТАРЫЕ СТИЛИ КОНТЕНТА --- */
-                        .main-wrapper { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; max-width: 1200px; padding-bottom: 50px; }
+                     .main-wrapper { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; max-width: 1200px; padding-bottom: 50px; }
                         .block { background: rgba(0,0,0,0.7); color: white; padding: 20px; border-radius: 8px; width: 320px; margin-bottom: 20px; }
                         input, button { width: 95%; padding: 10px; margin-bottom: 10px; border-radius: 5px; box-sizing: border-box; }
                         button { background: #007BFF; color: white; border: none; cursor: pointer; width: 100%; font-size: 16px; }
                         
                         .gallery-grid { display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-start; }
                         .gallery-wrapper { display: flex; flex-direction: column; align-items: center; width: 90px; }
-                        .gallery-item {
-                            width: 85px; height: 85px; 
-                            display: flex; justify-content: center; align-items: center;
-                            overflow: hidden; border-radius: 5px; background: rgba(255,255,255,0.1);
-                            transition: transform 0.2s;
-                        }
+                        .gallery-item { width: 85px; height: 85px; display: flex; justify-content: center; align-items: center; overflow: hidden; border-radius: 5px; background: rgba(255,255,255,0.1); transition: transform 0.2s; }
                         .gallery-item img { width: 100%; height: 100%; object-fit: cover; }
                         .gallery-item:hover { transform: scale(1.1); z-index: 10; box-shadow: 0 0 10px rgba(255,255,255,0.5); }
                         .work-border { border: 2px solid orange; }
@@ -260,8 +216,7 @@ export default (db) => {
                                 ${completedHtml || "<p>Нет задач</p>"}
                             </div>
                         </div>
-                        
-                        <div class="scroll-hint">⬇</div>
+                      <div class="scroll-hint">⬇</div>
                     </div>
 
                     <div class="page-section second-page">
@@ -282,8 +237,7 @@ export default (db) => {
         } catch (error) { console.error(error); res.status(500).send("Ошибка."); }
     });
     
-    // 3. ПРОФИЛЬ
-    router.get("/profile", requireLogin, async (req, res) => {
+  router.get("/profile", requireLogin, async (req, res) => {
         try {
             res.set('Cache-Control', 'public, max-age=0, must-revalidate'); 
             const user = await db.collection('users').findOne({ _id: ObjectId.createFromHexString(req.session.user._id) });
@@ -362,8 +316,7 @@ export default (db) => {
         } catch (error) { console.error(error); res.status(500).send('Ошибка.'); }
     });
 
-    // 4. СПИСОК АКТИВНОСТЕЙ
-    router.get("/activities", requireLogin, async (req, res) => {
+   router.get("/activities", requireLogin, async (req, res) => {
         try {
             res.set('Cache-Control', 'public, max-age=0, must-revalidate');  
             const users = await db.collection("users").find().toArray();
@@ -415,7 +368,7 @@ export default (db) => {
         } catch(error) { console.error(error); res.status(500).send("Ошибка."); }
     });
 
-   router.post("/update-activity", requireLogin, async (req, res) => {
+    router.post("/update-activity", requireLogin, async (req, res) => {
         try {
             const { activity, action } = req.body;
             const userId = ObjectId.createFromHexString(req.session.user._id);
@@ -425,7 +378,7 @@ export default (db) => {
             
             if (updateQuery) {
                 await db.collection("users").updateOne({ _id: userId }, updateQuery);
-             const updatedUser = await db.collection("users").findOne({ _id: userId });
+                const updatedUser = await db.collection("users").findOne({ _id: userId });
                 req.session.user.activities = updatedUser.activities;
             }
             await clearCache(LOGIN_PAGE_CACHE_KEY);  
@@ -461,8 +414,7 @@ export default (db) => {
         req.session.destroy(() => { res.clearCookie('connect.sid'); res.redirect('/'); });
     });
 
-    // ✅ ПОЛИТИКА КОНФИДЕНЦИАЛЬНОСТИ (ПОЛНАЯ ВЕРСИЯ)
-    router.get('/privacy-policy', (req, res) => {
+   router.get('/privacy-policy', (req, res) => {
         res.send(`
             <!DOCTYPE html>
             <html lang="ru">

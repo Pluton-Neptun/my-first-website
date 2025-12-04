@@ -46,7 +46,9 @@ export default (db, upload) => {
                   /* Стиль для выбора статуса */
                   .status-group { margin: 15px 0; background: rgba(255,255,255,0.1); padding: 10px; border-radius: 5px; }
                   .status-group label { display: block; margin-bottom: 5px; cursor: pointer; }
-                  .status-group input { margin-right: 10px; }
+                  .status-group input[type="radio"] { margin-right: 10px; }
+                  /* Стиль для суммы */
+                  .amount-input { margin-top: 10px; width: 100%; padding: 8px; box-sizing: border-box; border-radius: 5px; border: 1px solid #ccc; color: black; }
 
                   a.btn-back { display: block; background-color: #6c757d; color: white; text-align: center; padding: 10px; text-decoration: none; border-radius: 5px; margin-top: 20px; }
                 </style>
@@ -65,10 +67,11 @@ export default (db, upload) => {
                           <input type="file" name="document" required>
                           
                           <div class="status-group">
-                              <p style="margin-top:0">Выберите статус (необязательно):</p>
+                              <p style="margin-top:0">Выберите статус:</p>
                               <label><input type="radio" name="status" value="free"> Свободна сегодня</label>
                               <label><input type="radio" name="status" value="company"> Ждем компанию</label>
-                              <small style="color:#ccc">Если не выбрать, будет "Временно занята"</small>
+                              
+                              <input type="text" name="amount" class="amount-input" placeholder="Сумма до... (например: 5000)">
                           </div>
 
                           <button type="submit">Загрузить</button>
@@ -94,13 +97,13 @@ export default (db, upload) => {
         `);
     });
 
-    // 2. ЗАГРУЗКА (С сохранением статуса)
+    // 2. ЗАГРУЗКА (Сохраняем статус и СУММУ)
     router.post('/upload', requireLogin, upload.single('document'), async (req, res) => {
         try {
             if (!req.file) return res.status(400).json({ error: 'Нет файла.' });
             
-            // Получаем статус из формы. Если пусто -> 'busy'
-            const status = req.body.status || 'busy';
+           const status = req.body.status || 'busy';
+            const amount = req.body.amount || ''; // ✅ Получаем сумму
 
             await db.collection('tasks').insertOne({
                 originalName: req.file.originalname, 
@@ -108,11 +111,12 @@ export default (db, upload) => {
                 path: req.file.path,
                 uploadedBy: req.session.user.name, 
                 userId: ObjectId.createFromHexString(req.session.user._id), 
-                status: status, // ✅ Сохраняем статус
+                status: status, 
+                amount: amount, // ✅ Сохраняем в базу
                 createdAt: new Date()
             });
             await clearCache(LOGIN_PAGE_CACHE_KEY); 
-          res.json({ status: 'ok' });
+            res.json({ status: 'ok' });
         } catch (error) { console.error(error); res.status(500).json({ error: 'Ошибка сервера' }); }
     });
 
@@ -125,14 +129,14 @@ export default (db, upload) => {
                 createdAt: new Date(), completedAt: new Date()
             });
             await clearCache(LOGIN_PAGE_CACHE_KEY); 
-         res.json({ status: 'ok' });
+            res.json({ status: 'ok' });
         } catch (error) { console.error(error); res.status(500).json({ error: 'Ошибка сервера' }); }
     }); 
 
     // 3. СПИСКИ
     router.get('/tasks', requireLogin, async (req, res) => { 
         try {
-          res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+            res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
             const tasks = await db.collection('tasks').find().sort({ createdAt: -1 }).toArray(); 
             res.json(tasks);
         } catch (error) { res.status(500).json({ message: "Ошибка." }); }
@@ -140,7 +144,7 @@ export default (db, upload) => {
 
     router.get('/ready-documents', requireLogin, async (req, res) => { 
         try {
-         res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+            res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
             const documents = await db.collection('ready_documents').find().sort({ completedAt: -1 }).toArray();   
             res.json(documents);
         } catch (error) { res.status(500).json({ message: "Ошибка." }); }
