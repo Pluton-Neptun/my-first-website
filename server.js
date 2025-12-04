@@ -14,13 +14,12 @@ import fs from 'fs';
 import { createClient } from 'redis';
 import { csrfSync } from 'csrf-sync';
 
-// --- Инициализация Express ---
-const __filename = fileURLToPath(import.meta.url);
+const __filename = fileURLToPath(import.meta.url); 
 const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// --- Настройка CSRF ---
+// --- CSRF ---
 const { csrfSynchronisedProtection } = csrfSync({
     getTokenFromRequest: (req) => {
         if (req.body && req.body._csrf) return req.body._csrf;
@@ -29,35 +28,24 @@ const { csrfSynchronisedProtection } = csrfSync({
     }
 });
 
-// --- Инициализация Redis ---
-// Мы создаем клиента, но подключать будем только на Render
+// --- Redis (Только для Render) ---
 const redisClient = createClient({ 
     url: process.env.REDIS_URL || 'redis://localhost:6379',
     socket: { reconnectStrategy: false }
 });
+redisClient.on('error', (err) => {}); // Глушим ошибки
 
-redisClient.on('error', (err) => { 
-    // Тихая обработка ошибок
-});
-
-// --- Функции кэширования (Работают только если Redis включен) ---
+// Функции кэша (работают только если клиент подключен)
 async function setCache(key, value, options = { EX: 3600 }) {
-    if (redisClient.isOpen) { 
-        try { await redisClient.set(key, JSON.stringify(value), options); } catch (e) {}
-    }
+    if (redisClient.isOpen) try { await redisClient.set(key, JSON.stringify(value), options); } catch (e) {}
 }
-
-async function getCache(key) {
+async function getCache(key) { 
     if (redisClient.isOpen) {
-        try {
-            const cachedValue = await redisClient.get(key);
-            return cachedValue ? JSON.parse(cachedValue) : null;
-        } catch (e) { return null; }
+        try { return JSON.parse(await redisClient.get(key)); } catch (e) { return null; }
     }
     return null;
 }
-
-async function clearCache(key) {
+async function clearCache(key) { 
     if (redisClient.isOpen) {
         try {
             if (key.endsWith('*')) { 
@@ -68,10 +56,9 @@ async function clearCache(key) {
     }
 }
 export { setCache, getCache, clearCache };
-const LOGIN_PAGE_CACHE_KEY = 'loginPageData';
-export { LOGIN_PAGE_CACHE_KEY };
+export const LOGIN_PAGE_CACHE_KEY = 'loginPageData';
 
-// --- Multer (Загрузка файлов) ---
+// --- Multer ---
 const uploadDir = path.join(__dirname, 'public', 'uploads');
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
 const storage = multer.diskStorage({
@@ -94,16 +81,15 @@ app.use(session({
     store: MongoStore.create({ mongoUrl: process.env.DATABASE_URL })
 }));
 
-app.use(csrfSynchronisedProtection); 
-app.use((req, res, next) => { 
+app.use(csrfSynchronisedProtection);
+app.use((req, res, next) => {
     res.locals.csrfToken = req.csrfToken(); 
     next();
 });
 
-// --- Импорт маршрутов ---
-import authRoutes from './routes/authRoutes.js';
+import authRoutes from './routes/authRoutes.js'; 
 import workRoutes from './routes/workRoutes.js';
- 
+
 // --- ЗАПУСК ---
 const mongoClient = new MongoClient(process.env.DATABASE_URL);
 let db;
@@ -113,35 +99,27 @@ async function connectToDb() {
         await mongoClient.connect();
         console.log("✅ MongoDB подключена");
         
-        // --- ХИТРОСТЬ: Подключаем Redis ТОЛЬКО на Render ---
+        // Включаем Redis ТОЛЬКО если мы на Render
         if (process.env.RENDER) {
             try {
                 await redisClient.connect();
                 console.log("✅ Redis подключен (Render)");
-            } catch (redisError) {
-                console.log("⚠️ Ошибка Redis на Render");
-            }
+            } catch (e) { console.log("⚠️ Ошибка Redis на Render"); }
         } else {
-            // На компьютере мы просто не подключаем Redis
-            console.log("💻 Локальный режим: Redis выключен (чтобы не было ошибок)");
+            console.log("💻 Локальный режим (без Redis)");
         }
         
         db = mongoClient.db("my-first-website-db");
-        
-        app.use('/', authRoutes(db)); 
-        app.use('/work', workRoutes(db, upload)); 
+        app.use('/', authRoutes(db));
+        app.use('/work', workRoutes(db, upload));
 
-        app.use((err, req, res, next) => { 
+        app.use((err, req, res, next) => {
             if (err.code === 'EBADCSRFTOKEN') return res.status(403).send('Ошибка безопасности. Обновите страницу.');
             console.error(err);
             res.status(500).send('Ошибка сервера');
         });
         
-        app.listen(PORT, () => {
-            console.log(`🚀 Сервер запущен: http://localhost:${PORT}`);
-        });
-    } catch (error) {
-        console.error("Ошибка запуска:", error);
-    }
+        app.listen(PORT, () => console.log(`🚀 Сервер: http://localhost:${PORT}`));
+    } catch (error) { console.error("Ошибка запуска:", error); }
 }
-connectToDb(); 
+connectToDb();

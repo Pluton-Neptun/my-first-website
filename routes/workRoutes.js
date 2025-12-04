@@ -180,4 +180,4 @@ export default (db, upload) => {
     });
     
     return router;
-};
+}; 
