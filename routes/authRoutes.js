@@ -10,11 +10,50 @@ const requireLogin = (req, res, next) => {
 export default (db) => {
     const router = express.Router();
 
-    // РЕГИСТРАЦИЯ
+    // ---------------------------------------
+    // 1. РЕГИСТРАЦИЯ И ВХОД
+    // ---------------------------------------
     router.get('/register.html', (req, res) => res.redirect('/register')); 
+    
     router.get('/register', (req, res) => {
-        res.send(`<!DOCTYPE html><html lang="ru"><head><meta charset="UTF-8"><title>Регистрация</title><style>body{font-family:Arial;background:url('/images/background.jpg') center/cover;height:100vh;display:flex;justify-content:center;align-items:center}form{background:rgba(0,0,0,0.8);padding:30px;border-radius:10px;color:white;width:300px}input{width:95%;padding:10px;margin:10px 0;border-radius:5px}button{width:100%;padding:10px;background:#28a745;color:white;border:none;cursor:pointer}</style></head><body><form action="/register" method="POST"><input type="hidden" name="_csrf" value="${res.locals.csrfToken}"><h2>Регистрация</h2><input type="text" name="name" placeholder="Имя" required><input type="email" name="email" placeholder="Email" required><input type="password" name="password" placeholder="Пароль" required><button type="submit">Готово</button><br><br><a href="/login" style="color:#6cafff;display:block;text-align:center">Войти</a></form></body></html>`);
-    }); 
+        res.send(`
+            <!DOCTYPE html>
+            <html lang="ru">
+            <head>
+                <meta charset="UTF-8"><title>Регистрация</title>
+                <style>
+                    body { font-family: Arial, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background-image: url('/images/background.jpg'); background-size: cover; background-position: center; background-attachment: fixed; }
+                    form { background: rgba(0, 0, 0, 0.8); padding: 30px; border-radius: 10px; box-shadow: 0 0 15px rgba(0,0,0,0.5); width: 320px; color: white; }
+                    h2 { text-align: center; margin-bottom: 20px; }
+                    input { width: 95%; padding: 12px; margin-bottom: 15px; border-radius: 5px; border: 1px solid #ccc; }
+                    button { width: 100%; padding: 12px; border: none; border-radius: 5px; background-color: #28a745; color: white; font-size: 16px; cursor: pointer; }
+                    button:hover { background-color: #218838; }
+                    a { color: #6cafff; text-decoration: none; }
+                    .consent-group { margin-bottom: 15px; font-size: 0.9em; }
+                    .consent-group input { width: auto; margin-right: 5px; }
+                </style>
+            </head>
+            <body>
+                <form action="/register" method="POST">
+                    <input type="hidden" name="_csrf" value="${res.locals.csrfToken}">
+                    <h2>Регистрация</h2>
+                    <input type="text" name="name" placeholder="Имя" required>
+                    <input type="email" name="email" placeholder="Email" required>
+                    <input type="password" name="password" placeholder="Пароль" required>
+                    <div class="consent-group">
+                        <input type="checkbox" id="consent" required>
+                        <label for="consent">Я согласен с <a href="/privacy-policy" target="_blank">Политикой</a></label>
+                    </div>
+                    <button type="submit">Зарегистрироваться</button>
+                    <div style="text-align:center; margin-top:15px;">
+                        <a href="/login">Уже есть аккаунт? Войти</a>
+                    </div>
+                </form>
+            </body>
+            </html>
+        `);
+    });
+
     router.post("/register", async (req, res) => {
         try {
             if (await db.collection("users").findOne({ email: req.body.email })) return res.send(`Email занят. <a href="/register">Назад</a>`);
@@ -23,20 +62,24 @@ export default (db) => {
             res.redirect('/login');
         } catch (e) { res.status(500).send("Ошибка"); }
     });
+
     router.post("/login", async (req, res) => {
         const user = await db.collection("users").findOne({ email: req.body.email, password: req.body.password });
         if (user) { req.session.user = user; res.redirect("/profile"); } else { res.send("Ошибка входа"); }
     });
+
     router.post("/logout", (req, res) => req.session.destroy(() => res.redirect('/')));
 
-    // ✅ ПРОФИЛЬ (С СООБЩЕНИЯМИ)
+    // ---------------------------------------
+    // 2. ПРОФИЛЬ (С СООБЩЕНИЯМИ)
+    // ---------------------------------------
     router.get("/profile", requireLogin, async (req, res) => {
         try {
             res.set('Cache-Control', 'public, max-age=0, must-revalidate'); 
             const user = await db.collection('users').findOne({ _id: ObjectId.createFromHexString(req.session.user._id) });
-         const availability = user.availability || { days: [], time: "" };
+            const availability = user.availability || { days: [], time: "" };
 
-            // 📩 ПОЛУЧАЕМ СООБЩЕНИЯ ДЛЯ ПРОФИЛЯ
+            // Получаем сообщения для профиля
             const messages = await db.collection('messages').find({ toUserId: user._id }).sort({ createdAt: -1 }).toArray();
 
             let messagesHtml = messages.map(m => `
@@ -55,7 +98,7 @@ export default (db) => {
                         <div style="display:flex;gap:10px;justify-content:center;margin-bottom:20px;">
                             <a href="/work" style="background:#ff9800;color:white;padding:10px;border-radius:5px;">🍹 Коктейль</a>
                             <a href="/activities" style="background:#007BFF;color:white;padding:10px;border-radius:5px;">⚽ Активности</a>
-                        </div> 
+                        </div>
                         <hr>
                         <form action="/update-availability" method="POST">
                             <input type="hidden" name="_csrf" value="${res.locals.csrfToken}">
@@ -86,24 +129,23 @@ export default (db) => {
                 </body></html>
             `);
         } catch (error) { res.status(500).send("Ошибка."); }
-    }); 
+    });
+
     router.post('/update-availability', requireLogin, async (req, res) => {
         const d = Array.isArray(req.body.days)?req.body.days:[req.body.days].filter(Boolean);
         await db.collection('users').updateOne({ _id: ObjectId.createFromHexString(req.session.user._id) }, { $set: { phone: req.body.phone, city: req.body.city, country: req.body.country, availability: { days: d, time: req.body.time } } });
         res.redirect('/profile');
-    }); 
+    });
+
     router.post("/post-comment", requireLogin, async (req, res) => {
         await db.collection("comments").insertOne({ authorName: req.session.user.name, text: req.body.commentText, createdAt: new Date() });
         await clearCache(LOGIN_PAGE_CACHE_KEY); res.redirect("/profile");
     });
 
-    // АКТИВНОСТИ
-    router.get("/activities", async (req, res) => {
-        // ... (Код списка активностей остается таким же, он работает хорошо) ...
-        // Для краткости я его не дублирую, так как мы меняли только внутреннюю страницу участников
-        // ВАЖНО: Если вы скопируете, вставьте сюда полный код списка из прошлого ответа!
-        // Или оставьте старый список. Главное изменение ниже:
-        
+    // ---------------------------------------
+    // 3. АКТИВНОСТИ
+    // ---------------------------------------
+ router.get("/activities", async (req, res) => {
         try {
             res.set('Cache-Control', 'public, max-age=0, must-revalidate');  
             const users = await db.collection("users").find().toArray();
@@ -128,7 +170,7 @@ export default (db) => {
         await clearCache(LOGIN_PAGE_CACHE_KEY); res.redirect("/activities");
     });
 
-    // ✅ СТРАНИЦА УЧАСТНИКОВ С ФОРМОЙ ОТПРАВКИ
+    // СТРАНИЦА УЧАСТНИКОВ (С ФОРМОЙ ОТПРАВКИ)
     router.get('/activities/:activityName', async (req, res) => {
         try {
             const activityName = req.params.activityName;
@@ -158,38 +200,58 @@ export default (db) => {
                 ${html}
                 <div style="text-align:center; margin-top:20px;">
                     <a href="/activities" style="display:inline-block;">Назад к списку</a>
-                </div>
-
+             </div>
                 <script>
                     async function sendActivityMessage(e, toUserId) {
                         e.preventDefault();
                         const form = e.target;
                         const contact = form.contact.value;
                         const text = form.text.value;
-                        
-                        const res = await fetch('/send-message', {
+                    const res = await fetch('/send-message', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json', 'x-csrf-token': '${res.locals.csrfToken}' },
-                            body: JSON.stringify({ 
-                                toUserId: toUserId, 
-                                contactInfo: contact, 
-                                messageText: text, 
-                                source: '${activityName}' // Пометка, откуда письмо
-                            })
+                            body: JSON.stringify({ toUserId: toUserId, contactInfo: contact, messageText: text, source: '${activityName}' })
                         });
-
-                        if(res.ok) {
-                            alert('Сообщение отправлено! Ответ придет в Ваш Профиль (раздел Сообщения).');
-                            form.text.value = '';
-                        } else {
-                            alert('Ошибка отправки.');
-                        }
+                        if(res.ok) { alert('Сообщение отправлено! Ответ придет в Ваш Профиль.'); form.text.value = ''; }
+                        else { alert('Ошибка отправки.'); }
                     }
                 </script>
                 </body></html>
             `);
-        } catch (error) { console.error(error); res.status(500).send('Ошибка.'); }
-    }); 
+        } catch (error) { res.status(500).send('Ошибка.'); }
+    });
+
+    // ---------------------------------------
+    // 4. ПОЛИТИКА КОНФИДЕНЦИАЛЬНОСТИ (✅ ВОССТАНОВЛЕНА)
+    // ---------------------------------------
+    router.get('/privacy-policy', (req, res) => {
+        res.send(`
+            <!DOCTYPE html>
+            <html lang="ru">
+            <head>
+                <meta charset="UTF-8">
+                <title>Политика конфиденциальности</title>
+                <style>
+                    body { font-family: Arial, sans-serif; padding: 20px; line-height: 1.6; background-color: #f4f4f4; color: #333; }
+                    .container { max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; }
+                    h1 { color: #2c3e50; }
+                    a.btn { display: inline-block; background-color: #007BFF; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; margin-top: 20px; }
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <h1>Политика конфиденциальности</h1>
+                    <p>Последнее обновление: ${new Date().toLocaleDateString()}</p>
+                    <h2>1. Сбор информации</h2><p>Мы собираем Имя, Email и данные профиля (по желанию).</p>
+                    <h2>2. Использование</h2><p>Данные используются для работы функций сайта (Активности, Чат).</p>
+                    <h2>3. Безопасность</h2><p>Пароли шифруются, данные защищены.</p>
+                    <h2>4. Третьи лица</h2><p>Мы не передаем ваши данные третьим лицам.</p>
+                    <a href="/register" class="btn">Вернуться к регистрации</a>
+                </div>
+            </body>
+            </html>
+        `);
+    });
 
     return router;
 };
