@@ -76,4 +76,4 @@ async function connectToDb() {
         app.listen(PORT, () => console.log(`🚀 Сервер: http://localhost:${PORT}`));
     } catch (error) { console.error(error); }
 }
-connectToDb();
+connectToDb(); 
