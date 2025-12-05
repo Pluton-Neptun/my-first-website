@@ -10,11 +10,7 @@ const requireLogin = (req, res, next) => {
 export default (db) => {
     const router = express.Router();
 
-    // ---------------------------------------
-    // 1. РЕГИСТРАЦИЯ И ВХОД
-    // ---------------------------------------
-    
-    router.get('/register.html', (req, res) => res.redirect('/register')); 
+    // 1. РЕГИСТРАЦИЯ И ВХОД    router.get('/register.html', (req, res) => res.redirect('/register')); 
     
     router.get('/register', (req, res) => {
         res.send(`
@@ -61,20 +57,14 @@ export default (db) => {
             const existingUser = await db.collection("users").findOne({ email: email });
             if (existingUser) return res.send(`<h2>Ошибка</h2><p>Email занят.</p><a href="/register">Назад</a>`);
             
-            const newUser = { 
-                name, email, password, 
-                phone: "", city: "", country: "", 
-                registeredAt: new Date().toLocaleString(), 
-                activities: [] 
-            };
+            const newUser = { name, email, password, phone: "", city: "", country: "", registeredAt: new Date().toLocaleString(), activities: [] };
             await db.collection("users").insertOne(newUser);
             await clearCache(LOGIN_PAGE_CACHE_KEY);
             res.send(`<h2>Успешно!</h2><p><a href="/login">Войти</a></p>`);
         } catch (error) { console.error(error); res.status(500).send("Ошибка."); }
     });
 
-    // Обработка ВХОДА (POST)
-    router.post("/login", async (req, res) => {
+   router.post("/login", async (req, res) => {
         try {
             const user = await db.collection("users").findOne({ email: req.body.email, password: req.body.password });
             if (user) { req.session.user = user; res.redirect("/profile"); }
@@ -86,9 +76,7 @@ export default (db) => {
         req.session.destroy(() => { res.clearCookie('connect.sid'); res.redirect('/'); });
     });
 
-    // ---------------------------------------
-    // 2. ПРОФИЛЬ (Восстановлены поля ввода)
-    // ---------------------------------------
+    // 2. ПРОФИЛЬ
     router.get("/profile", requireLogin, async (req, res) => {
         try {
             res.set('Cache-Control', 'public, max-age=0, must-revalidate'); 
@@ -108,8 +96,7 @@ export default (db) => {
                         input, button, textarea { width: 95%; padding: 10px; margin: 5px 0; border-radius: 5px; box-sizing: border-box; }
                         button { background: #28a745; color: white; border: none; cursor: pointer; font-size: 16px; }
                         .logout-btn { background: #dc3545; }
-                        a { color: #6cafff; display: block; margin-top: 10px; text-align: center; text-decoration: none; font-size: 1.1em; }
-                        a:hover { text-decoration: underline; }
+                     a { color: #6cafff; display: block; margin-top: 10px; text-align: center; text-decoration: none; font-size: 1.1em; }
                         .checkbox-group label { display: inline-block; margin-right: 15px; cursor: pointer; }
                         h2, h3 { text-align: center; }
                         hr { border: 0; border-top: 1px solid #555; margin: 20px 0; }
@@ -121,49 +108,38 @@ export default (db) => {
                         <p style="text-align:center"><b>Email:</b> ${user.email}</p>
                         
                         <div style="display:flex; gap:10px; justify-content:center; margin-bottom:20px;">
-                            <a href="/work" style="background:#ff9800; color:white; padding:10px; border-radius:5px;">🍹 В Кабинет</a>
+                            <a href="/work" style="background:#ff9800; color:white; padding:10px; border-radius:5px;">🍹 Коктейль можно попить</a>
                             <a href="/activities" style="background:#007BFF; color:white; padding:10px; border-radius:5px;">⚽ Активности</a>
                         </div>
                         
                         <hr>
-                        
-                        <form action="/update-availability" method="POST">
+                      <form action="/update-availability" method="POST">
                             <input type="hidden" name="_csrf" value="${res.locals.csrfToken}">
                             <h3>Ваши данные:</h3>
-                            
-                            <label>Телефон:</label>
-                            <input type="text" name="phone" value="${user.phone || ''}" placeholder="+7 (XXX) XXX-XX-XX">
-                            
+                          <label>Телефон:</label>
+                          <input type="text" name="phone" value="${user.phone || ''}" placeholder="+7 (XXX) XXX-XX-XX">
                             <label>Город:</label>
                             <input type="text" name="city" value="${user.city || ''}" placeholder="Ваш город">
-                            
-                            <label>Страна:</label>
+                         <label>Страна:</label>
                             <input type="text" name="country" value="${user.country || ''}" placeholder="Ваша страна">
-                            
-                            <div class="checkbox-group" style="margin: 15px 0;">
+                         <div class="checkbox-group" style="margin: 15px 0;">
                                 <label style="font-weight:bold; display:block; margin-bottom:5px;">Свободные дни:</label>
                                 <label><input type="checkbox" name="days" value="ПН" ${availability.days.includes('ПН')?'checked':''}> ПН</label>
                                 <label><input type="checkbox" name="days" value="СР" ${availability.days.includes('СР')?'checked':''}> СР</label>
                                 <label><input type="checkbox" name="days" value="ПТ" ${availability.days.includes('ПТ')?'checked':''}> ПТ</label>
-                            </div>
-                            
+                         </div>
                             <label>Удобное время:</label>
                             <input type="text" name="time" value="${availability.time || ''}" placeholder="Например: 18:00 - 20:00">
-                            
-                            <button type="submit">Сохранить изменения</button>
+                          <button type="submit">Сохранить изменения</button>
                         </form>
-                        
-                        <hr>
-                        
-                        <form action="/post-comment" method="POST">
+                     <hr>
+                      <form action="/post-comment" method="POST">
                             <input type="hidden" name="_csrf" value="${res.locals.csrfToken}">
                             <h3>Оставить комментарий</h3>
                             <textarea name="commentText" required placeholder="Напишите что-нибудь на главную..." style="height:80px;"></textarea>
                             <button type="submit" style="background:#007BFF">Отправить</button>
                         </form>
-                        
-                        <hr>
-                        
+                       <hr>
                         <form action="/logout" method="POST" style="text-align:center">
                             <input type="hidden" name="_csrf" value="${res.locals.csrfToken}">
                             <button type="submit" class="logout-btn">Выйти</button>
@@ -179,12 +155,10 @@ export default (db) => {
         try {
             const { days, time, phone, city, country } = req.body;
             const daysArray = Array.isArray(days) ? days : (days ? [days] : []); 
-            
-            await db.collection('users').updateOne(
+          await db.collection('users').updateOne(
                 { _id: ObjectId.createFromHexString(req.session.user._id) }, 
                 { $set: { phone, city, country, availability: { days: daysArray, time } } }
-            );
-            
+          );
             await clearCache(LOGIN_PAGE_CACHE_KEY);
             res.redirect('/profile');
         } catch (error) { console.error(error); res.status(500).send('Ошибка.'); }
@@ -192,32 +166,23 @@ export default (db) => {
 
     router.post("/post-comment", requireLogin, async (req, res) => {
         try {
-            await db.collection("comments").insertOne({ 
-                authorName: req.session.user.name, 
-                text: req.body.commentText, 
-                createdAt: new Date() 
-            });
+            await db.collection("comments").insertOne({ authorName: req.session.user.name, text: req.body.commentText, createdAt: new Date() });
             await clearCache(LOGIN_PAGE_CACHE_KEY);
             res.redirect("/profile");
         } catch (error) { console.error(error); res.status(500).send("Ошибка."); }
     });
 
-    // ---------------------------------------
-    // 3. АКТИВНОСТИ (Восстановлена логика)
-    // ---------------------------------------
+    // 3. АКТИВНОСТИ
     
-    // Страница списка активностей
+    // Страница списка (Нужен вход для записи, но просмотр можно открыть)
     router.get("/activities", requireLogin, async (req, res) => {
         try {
             res.set('Cache-Control', 'public, max-age=0, must-revalidate');  
-            const users = await db.collection("users").find().toArray();
-            
-            // Получаем текущие активности пользователя
+          const users = await db.collection("users").find().toArray();
             const currentUser = await db.collection("users").findOne({ _id: ObjectId.createFromHexString(req.session.user._id) });
             const userActivities = currentUser ? (currentUser.activities || []) : [];
             
-            // Считаем участников
-            const counts = {
+          const counts = {
                 chess: users.filter(u => u.activities?.includes("Шахматы")).length,
                 football: users.filter(u => u.activities?.includes("Футбол")).length,
                 dance: users.filter(u => u.activities?.includes("Танцы")).length,
@@ -256,28 +221,23 @@ export default (db) => {
                 </style></head><body>
                 <div class="tab-container">
                     <h2>Доступные активности</h2>
-                    
-                    <h3>Основные</h3>
+                  <h3>Основные</h3>
                     ${renderCard("Шахматы", counts.chess, "♟️ Шахматы")}
                     ${renderCard("Футбол", counts.football, "⚽ Футбол")}
                     ${renderCard("Танцы", counts.dance, "💃 Танцы")}
-                    
-                    <h3>Активный отдых</h3>
+                  <h3>Активный отдых</h3>
                     ${renderCard("Хоккей", counts.hockey, "🏒 Хоккей")}
                     ${renderCard("Волейбол", counts.volley, "🏐 Волейбол")}
-                    ${renderCard("Походы", counts.hiking, "🥾 Походы")}
-                    
+                  ${renderCard("Походы", counts.hiking, "🥾 Походы")}
                     <h3>Для души</h3>
                     ${renderCard("Путешествие", counts.travel, "✈️ Путешествие с тобой")}
-
-                    <a href="/profile" class="back-link">Вернуться в профиль</a>
+                  <a href="/profile" class="back-link">Вернуться в профиль</a>
                 </div></body></html>
             `);
         } catch(error) { console.error(error); res.status(500).send("Ошибка."); }
     });
 
-    // Логика записи/отписки
-    router.post("/update-activity", requireLogin, async (req, res) => {
+ router.post("/update-activity", requireLogin, async (req, res) => {
         try {
             const { activity, action } = req.body;
             const userId = ObjectId.createFromHexString(req.session.user._id);
@@ -287,8 +247,7 @@ export default (db) => {
             
             if (updateQuery) {
                 await db.collection("users").updateOne({ _id: userId }, updateQuery);
-                // Обновляем сессию
-                const updatedUser = await db.collection("users").findOne({ _id: userId });
+             const updatedUser = await db.collection("users").findOne({ _id: userId });
                 req.session.user.activities = updatedUser.activities;
             }
             await clearCache(LOGIN_PAGE_CACHE_KEY);  
@@ -296,8 +255,9 @@ export default (db) => {
         } catch (error) { console.error(error); res.status(500).send("Ошибка."); }
     });
 
-    // Страница участников конкретной активности
-    router.get('/activities/:activityName', requireLogin, async (req, res) => {
+    // ✅ СТРАНИЦА УЧАСТНИКОВ (ТЕПЕРЬ ДОСТУПНА ВСЕМ)
+    // Убрали requireLogin, чтобы можно было заходить с главной страницы
+    router.get('/activities/:activityName', async (req, res) => {
         try {
             const activityName = req.params.activityName;
             const participants = await db.collection('users').find({ activities: activityName }).toArray();
@@ -321,15 +281,16 @@ export default (db) => {
                 </style></head><body>
                 <h1>Участники: ${activityName}</h1>
                 ${html}
-                <a href="/activities">Назад к списку</a>
+                <div style="text-align:center; margin-top:20px;">
+                    <a href="/login" style="background:#6c757d; display:inline-block;">На главную</a>
+                    <a href="/activities" style="background:#28a745; display:inline-block;">Записаться</a>
+                </div>
                 </body></html>
             `);
         } catch (error) { console.error(error); res.status(500).send('Ошибка.'); }
     });
 
-    // ---------------------------------------
-    // 4. ПОЛИТИКА КОНФИДЕНЦИАЛЬНОСТИ (Восстановлена)
-    // ---------------------------------------
+    // 4. ПОЛИТИКА КОНФИДЕНЦИАЛЬНОСТИ
     router.get('/privacy-policy', (req, res) => {
         res.send(`
             <!DOCTYPE html>

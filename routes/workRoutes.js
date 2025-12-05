@@ -8,9 +8,9 @@ const __dirname = path.resolve();
 const requireLogin = (req, res, next) => { if (req.session.user) next(); else return res.redirect("/login"); };
 
 export default (db, upload) => {
-    const router = express.Router(); 
+    const router = express.Router();
 
-    // 1. СТРАНИЦА КАБИНЕТА
+    // СТРАНИЦА КАБИНЕТА
     router.get('/', requireLogin, async (req, res) => { 
         res.set('Cache-Control', 'public, max-age=0, must-revalidate'); 
         res.send(`
@@ -19,8 +19,8 @@ export default (db, upload) => {
             <head>
                 <meta charset="UTF-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <title>Коктейль - Кабинет</title>
-             <script src="/ga.js"></script>
+                <title>Коктейль можно попить</title>
+                <script src="/ga.js"></script>
                 <style>
                   body { font-family: Arial, sans-serif; padding: 20px; background-image: url('/images/background.jpg'); background-size: cover; color: white; background-attachment: fixed; }
                   .container { max-width: 800px; margin: 20px auto; background-color: rgba(0, 0, 0, 0.85); padding: 30px; border-radius: 10px; box-shadow: 0 0 15px rgba(0,0,0,0.5); }
@@ -51,14 +51,14 @@ export default (db, upload) => {
             </head>
             <body>
                 <div class="container">
-                    <h1>🍹 Мой Кабинет</h1>
+                    <h1>🍹 Коктейль можно попить</h1>
                     <div class="tabs">
                       <button class="tab-button active" onclick="openTab('tab-tasks')">Мои Загрузки</button>
                       <button class="tab-button" onclick="openTab('tab-messages')">📨 Входящие сообщения</button>
                     </div>
 
                     <div id="tab-tasks" class="tab-content active">
-                      <h2>Загрузить фото для Коктейля</h2>
+                      <h2>Загрузить фото</h2>
                       <form id="upload-form" enctype="multipart/form-data">
                           <input type="file" name="document" required style="margin-bottom:10px; color:white;">
                           
@@ -94,12 +94,10 @@ export default (db, upload) => {
                         document.querySelectorAll('.tab-button').forEach(b => b.classList.remove('active'));
                         document.getElementById(id).classList.add('active');
                         document.querySelector(\`button[onclick="openTab('\${id}')"]\`).classList.add('active');
-                        
-                        if(id === 'tab-messages') loadMessages();
+                     if(id === 'tab-messages') loadMessages();
                     }
                     
-                    // ЗАГРУЗКА ФАЙЛА
-                    document.getElementById('upload-form').addEventListener('submit', async (e) => {
+                 document.getElementById('upload-form').addEventListener('submit', async (e) => {
                         e.preventDefault();
                         const formData = new FormData(e.target);
                         await fetch('/work/upload', { method: 'POST', body: formData, headers: {'x-csrf-token': CSRF_TOKEN} });
@@ -108,13 +106,11 @@ export default (db, upload) => {
                         e.target.reset();
                     });
 
-                    // СПИСОК ФАЙЛОВ
-                    async function loadTasks() {
+                  async function loadTasks() {
                         const res = await fetch('/work/tasks');
                         const tasks = await res.json();
                         const list = document.getElementById('tasks-list');
-                        
-                        if(tasks.length === 0) { list.innerHTML = '<p>Нет загруженных фото.</p>'; return; }
+                       if(tasks.length === 0) { list.innerHTML = '<p>Нет загруженных фото.</p>'; return; }
 
                         list.innerHTML = tasks.map(t => \`
                             <li style="background:rgba(255,255,255,0.1); padding:10px; margin-bottom:5px; border-radius:5px; display:flex; justify-content:space-between; align-items:center;">
@@ -132,13 +128,11 @@ export default (db, upload) => {
                         loadTasks();
                     }
 
-                    // --- ЛОГИКА СООБЩЕНИЙ ---
-                    async function loadMessages() {
+                 async function loadMessages() {
                         const res = await fetch('/work/messages');
                         const msgs = await res.json();
                         const div = document.getElementById('messages-list');
-                        
-                        if(msgs.length === 0) { div.innerHTML = '<p>Сообщений пока нет.</p>'; return; }
+                       if(msgs.length === 0) { div.innerHTML = '<p>Сообщений пока нет.</p>'; return; }
 
                         div.innerHTML = msgs.map(m => \`
                             <div class="msg-card">
@@ -151,12 +145,10 @@ export default (db, upload) => {
                                     \`<div style="background:rgba(40, 167, 69, 0.2); padding:5px; border-radius:5px; margin-top:5px;">
                                         ✅ <strong>Вы ответили:</strong> \${m.reply}
                                      </div>\` : 
-                                    \`
-                                    <div id="reply-box-\${m._id}">
-                                        <input type="text" id="reply-\${m._id}" class="reply-area" placeholder="Напишите ответ и нажмите кнопку...">
+                                    \`<div id="reply-box-\${m._id}">
+                                        <input type="text" id="reply-\${m._id}" class="reply-area" placeholder="Напишите ответ...">
                                         <button onclick="replyTo('\${m._id}')" style="margin-top:5px; background:#00c3ff; width:100%;">Отправить ответ</button>
-                                    </div>
-                                    \`
+                                    </div>\`
                                 }
                             </div>
                         \`).join('');
@@ -164,18 +156,12 @@ export default (db, upload) => {
 
                     async function replyTo(id) {
                         const text = document.getElementById('reply-'+id).value;
-                        if(!text) return alert('Напишите текст ответа!');
-                        
-                        const res = await fetch('/work/reply', {
+                        if(!text) return alert('Напишите текст ответа!');                        const res = await fetch('/work/reply', {
                             method: 'POST',
                             headers: {'Content-Type': 'application/json', 'x-csrf-token': CSRF_TOKEN},
                             body: JSON.stringify({ msgId: id, text })
                         });
-                        
-                        if(res.ok) {
-                            alert('Ответ отправлен!');
-                            loadMessages();
-                        }
+                        if(res.ok) { alert('Ответ отправлен!'); loadMessages(); }
                     }
 
                     loadTasks();
@@ -185,10 +171,9 @@ export default (db, upload) => {
         `);
     });
 
-    // 2. ОБРАБОТЧИКИ (API)
-    router.post('/upload', requireLogin, upload.single('document'), async (req, res) => {
+  router.post('/upload', requireLogin, upload.single('document'), async (req, res) => {
         try {
-          await db.collection('tasks').insertOne({
+            await db.collection('tasks').insertOne({
                 originalName: req.file.originalname, fileName: req.file.filename, path: req.file.path,
                 uploadedBy: req.session.user.name, 
                 userId: ObjectId.createFromHexString(req.session.user._id), 
@@ -207,16 +192,11 @@ export default (db, upload) => {
 
     router.delete('/tasks/:id', requireLogin, async (req, res) => {
         const t = await db.collection('tasks').findOne({ _id: ObjectId.createFromHexString(req.params.id) });
-        if(t) { 
-            try { fs.unlinkSync(t.path); } catch(e){} 
-            await db.collection('tasks').deleteOne({ _id: t._id }); 
-            await clearCache(LOGIN_PAGE_CACHE_KEY); 
-        }
+        if(t) { try { fs.unlinkSync(t.path); } catch(e){} await db.collection('tasks').deleteOne({ _id: t._id }); await clearCache(LOGIN_PAGE_CACHE_KEY); }
         res.sendStatus(200);
     });
 
-    // СООБЩЕНИЯ
-    router.get('/messages', requireLogin, async (req, res) => {
+   router.get('/messages', requireLogin, async (req, res) => {
         const msgs = await db.collection('messages').find({ toUserId: ObjectId.createFromHexString(req.session.user._id) }).sort({ createdAt: -1 }).toArray();
         res.json(msgs);
     });
