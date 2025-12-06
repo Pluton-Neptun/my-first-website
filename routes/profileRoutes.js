@@ -18,9 +18,7 @@ export default (db) => {
             const availability = user.availability || { days: [], time: "" };
 
             // 1. Загрузка сообщений
-            const allMessages = await db.collection('messages').find({ toUserId: user._id }).sort({ createdAt: -1 }).toArray();
-            
-            // Фильтруем: Вечерние (ответы на планы) и Обычные (из галереи или профиля)
+           const allMessages = await db.collection('messages').find({ toUserId: user._id }).sort({ createdAt: -1 }).toArray();
             const eveningMessages = allMessages.filter(m => m.source && m.source.includes('После 19:00'));
             const otherMessages = allMessages.filter(m => !m.source || !m.source.includes('После 19:00'));
 
@@ -54,10 +52,10 @@ export default (db) => {
                     .msg-source { font-size:0.8em; color:#d4af37; margin-bottom:5px; font-weight:bold; }
                     hr { border:0; border-top:1px solid #555; margin:20px 0; }
                     
-                    /* СТИЛЬ ФОРМЫ (ФИОЛЕТОВАЯ) */
+                    /* Стиль формы */
                     .create-plan-box { background: rgba(156, 39, 176, 0.2); padding: 15px; border-radius: 8px; border: 1px solid #9c27b0; margin-bottom: 20px; }
                     
-                    /* ТАБЫ */
+                    /* Табы */
                     .tabs { display:flex; justify-content:center; gap:20px; margin-bottom:15px; border-bottom:1px solid #555; padding-bottom:10px; }
                     .tab-link { color:#aaa; cursor:pointer; font-size:1.1em; }
                     .tab-link.active { color:white; font-weight:bold; border-bottom:2px solid white; }
@@ -78,18 +76,14 @@ export default (db) => {
                         <hr>
 
                         <div class="tabs">
-                            <span id="link-all" class="tab-link active" onclick="showTab('tab-all')">📬 Входящие</span>
-                            <span id="link-evening" class="tab-link" onclick="showTab('tab-evening')" style="color:#d4af37;">🌙 После 19:00</span>
+                            <span class="tab-link active" onclick="showTab('tab-evening')" style="color:#d4af37;">🌙 Доска: Публикация и Ответы</span>
+                            <span class="tab-link" onclick="showTab('tab-all')">📬 Входящие (Общие)</span>
                         </div>
 
-                        <div id="tab-all" class="tab-content active" style="max-height:400px; overflow-y:auto;">
-                            ${otherMessages.length > 0 ? otherMessages.map(renderMsg).join('') : '<p style="text-align:center;color:#777; margin-top:20px;">Нет новых сообщений.</p>'}
-                        </div>
-
-                        <div id="tab-evening" class="tab-content" style="max-height:600px; overflow-y:auto;">
+                        <div id="tab-evening" class="tab-content active" style="max-height:600px; overflow-y:auto;">
                             
                             <div class="create-plan-box">
-                                <h3 style="color:#d4af37; margin-top:0;">📝 Написать объявление</h3>
+                                <h3 style="color:#d4af37; margin-top:0;">📝 Создать объявление</h3>
                                 <form action="/evening/add" method="POST">
                                     <input type="hidden" name="_csrf" value="${res.locals.csrfToken}">
                                     <div style="display:flex; gap:10px;">
@@ -97,12 +91,17 @@ export default (db) => {
                                         <input type="text" name="contact" value="${user.phone||''}" placeholder="Ваш контакт" required style="width:70%;">
                                     </div>
                                     <textarea name="text" placeholder="Заголовок: Иду в кино... / Кальян / Прогулка..." required style="height:60px;"></textarea>
-                                    <button type="submit" style="background:#9c27b0;">Опубликовать</button>
+                                    <button type="submit" style="background:#9c27b0;">Опубликовать на Доску</button>
                                 </form>
                             </div>
 
-                            <h4 style="color:#ccc; text-align:center; margin-top:20px;">Ответы на ваши объявления:</h4>
+                            <h4 style="color:#ccc; text-align:center;">Ответы на ваши объявления:</h4>
                             ${eveningMessages.length > 0 ? eveningMessages.map(renderMsg).join('') : '<p style="text-align:center;color:#777">Пока никто не ответил.</p>'}
+                        </div>
+
+                        <div id="tab-all" class="tab-content" style="max-height:400px; overflow-y:auto;">
+                            <h4 style="color:#ccc; text-align:center;">Сообщения из Галереи и Активностей:</h4>
+                            ${otherMessages.length > 0 ? otherMessages.map(renderMsg).join('') : '<p style="text-align:center;color:#777">Нет новых сообщений.</p>'}
                         </div>
 
                         <hr>
@@ -113,15 +112,13 @@ export default (db) => {
                             <label>Телефон:</label><input type="text" name="phone" value="${user.phone||''}" placeholder="+7...">
                             <label>Город:</label><input type="text" name="city" value="${user.city||''}" placeholder="Город">
                             <label>Страна:</label><input type="text" name="country" value="${user.country||''}" placeholder="Страна">
-                            
-                            <div class="checkbox-group" style="margin: 15px 0;">
+                          <div class="checkbox-group" style="margin: 15px 0;">
                                 <label>Дни:</label>
                                 <label><input type="checkbox" name="days" value="ПН" ${availability.days.includes('ПН')?'checked':''}>ПН</label>
                                 <label><input type="checkbox" name="days" value="СР" ${availability.days.includes('СР')?'checked':''}>СР</label>
                                 <label><input type="checkbox" name="days" value="ПТ" ${availability.days.includes('ПТ')?'checked':''}>ПТ</label>
                             </div>
-                            
-                            <label>Удобное время:</label><input type="text" name="time" value="${availability.time||''}" placeholder="18:00 - 20:00">
+                          <label>Удобное время:</label><input type="text" name="time" value="${availability.time||''}" placeholder="18:00 - 20:00">
                             <button type="submit">Сохранить</button>
                         </form>
 
@@ -137,16 +134,10 @@ export default (db) => {
 
                     <script>
                         function showTab(id) {
-                            // Скрываем все вкладки
-                            document.querySelectorAll('.tab-content').forEach(d => d.classList.remove('active'));
+                          document.querySelectorAll('.tab-content').forEach(d => d.classList.remove('active'));
                             document.querySelectorAll('.tab-link').forEach(l => l.classList.remove('active'));
-                            
-                            // Показываем нужную
-                            document.getElementById(id).classList.add('active');
-                            
-                            // Подсвечиваем кнопку
-                            if(id === 'tab-all') document.getElementById('link-all').classList.add('active');
-                            if(id === 'tab-evening') document.getElementById('link-evening').classList.add('active');
+                          document.getElementById(id).classList.add('active');
+                            event.target.classList.add('active');
                         }
                     </script>
                 </body></html>
@@ -154,8 +145,7 @@ export default (db) => {
         } catch (error) { res.status(500).send("Ошибка."); }
     });
 
-    // ОБНОВЛЕНИЕ ДАННЫХ
-    router.post('/update-availability', requireLogin, async (req, res) => {
+  router.post('/update-availability', requireLogin, async (req, res) => {
         const days = Array.isArray(req.body.days) ? req.body.days : (req.body.days ? [req.body.days] : []);
         await db.collection('users').updateOne(
             { _id: ObjectId.createFromHexString(req.session.user._id) }, 
@@ -164,8 +154,7 @@ export default (db) => {
         res.redirect('/profile');
     });
 
-    // КОММЕНТАРИЙ
-    router.post("/post-comment", requireLogin, async (req, res) => {
+ router.post("/post-comment", requireLogin, async (req, res) => {
         await db.collection("comments").insertOne({ authorName: req.session.user.name, text: req.body.commentText, createdAt: new Date() });
         await clearCache(LOGIN_PAGE_CACHE_KEY); 
         res.redirect("/profile");
