@@ -10,7 +10,7 @@ const requireLogin = (req, res, next) => {
 export default (db) => {
     const router = express.Router();
 
-    // 1. РЕГИСТРАЦИЯ И ВХОД 
+    // 1. РЕГИСТРАЦИЯ И ВХОД
     router.get('/register.html', (req, res) => res.redirect('/register')); 
     router.get('/register', (req, res) => {
         res.send(`<!DOCTYPE html><html lang="ru"><head><meta charset="UTF-8"><title>Регистрация</title><style>body{font-family:Arial;background:url('/images/background.jpg') center/cover;height:100vh;display:flex;justify-content:center;align-items:center}form{background:rgba(0,0,0,0.8);padding:30px;border-radius:10px;color:white;width:300px}input{width:95%;padding:10px;margin:10px 0;border-radius:5px}button{width:100%;padding:10px;background:#28a745;color:white;border:none;cursor:pointer}a{color:#6cafff;}</style></head><body><form action="/register" method="POST"><input type="hidden" name="_csrf" value="${res.locals.csrfToken}"><h2>Регистрация</h2><input type="text" name="name" placeholder="Имя" required><input type="email" name="email" placeholder="Email" required><input type="password" name="password" placeholder="Пароль" required><div style="margin:10px 0"><input type="checkbox" required> <label>Согласен с <a href="/privacy-policy" target="_blank">Политикой</a></label></div><button type="submit">Готово</button><br><br><a href="/login" style="display:block;text-align:center">Войти</a></form></body></html>`);
@@ -31,7 +31,7 @@ export default (db) => {
     });
     router.post("/logout", (req, res) => req.session.destroy(() => res.redirect('/')));
 
-    // 2. ПРОФИЛЬ (КАБИНЕТ) 
+    // 2. ПРОФИЛЬ (КАБИНЕТ)
     router.get("/profile", requireLogin, async (req, res) => {
         try {
             res.set('Cache-Control', 'public, max-age=0, must-revalidate'); 
@@ -74,14 +74,18 @@ export default (db) => {
                     .msg-source { font-size:0.8em; color:#d4af37; margin-bottom:5px; font-weight:bold; }
                     hr { border:0; border-top:1px solid #555; margin:20px 0; }
                     
-                    /* ФОРМА СОЗДАНИЯ (Теперь внутри таба) */
+                    /* ФОРМА СОЗДАНИЯ (Внутри таба) */
                     .create-plan-box { background: rgba(156, 39, 176, 0.2); padding: 15px; border-radius: 8px; border: 1px solid #9c27b0; margin-bottom: 20px; }
                     
+                    /* ТАБЫ */
                     .tabs { display:flex; justify-content:center; gap:20px; margin-bottom:15px; border-bottom:1px solid #555; padding-bottom:10px; }
                     .tab-link { color:#aaa; cursor:pointer; font-size:1.1em; }
                     .tab-link.active { color:white; font-weight:bold; border-bottom:2px solid white; }
                     .tab-content { display:none; }
                     .tab-content.active { display:block; }
+
+                    /* Чекбоксы дней */
+                    .checkbox-group label { display: inline-block; margin-right: 15px; cursor: pointer; }
                 </style></head><body>
                     <div class="content">
                         <h2>Кабинет: ${user.name}</h2>
@@ -94,7 +98,7 @@ export default (db) => {
                         
                         <hr>
 
-                        <h3>📬 Ваши Сообщения</h3>
+                        <h3>📨 Входящие сообщения</h3>
                         <div class="tabs">
                             <span class="tab-link active" onclick="showTab('tab-all')">Общие (${otherMessages.length})</span>
                             <span class="tab-link" onclick="showTab('tab-evening')" style="color:#d4af37;">🌙 После 19:00 (${eveningMessages.length})</span>
@@ -107,7 +111,7 @@ export default (db) => {
                         <div id="tab-evening" class="tab-content" style="max-height:500px; overflow-y:auto;">
                             
                             <div class="create-plan-box">
-                                <h3 style="color:#d4af37; margin-top:0;">📢 Опубликовать на Доску</h3>
+                                <h3 style="color:#d4af37; margin-top:0;">📢 Опубликовать объявление</h3>
                                 <form action="/evening/add" method="POST">
                                     <input type="hidden" name="_csrf" value="${res.locals.csrfToken}">
                                     <div style="display:flex; gap:10px;">
@@ -115,7 +119,7 @@ export default (db) => {
                                         <input type="text" name="contact" value="${user.phone||''}" placeholder="Ваш контакт" required style="width:70%;">
                                     </div>
                                     <textarea name="text" placeholder="Заголовок: Иду в кино... / Кальян / Прогулка..." required style="height:60px;"></textarea>
-                                    <button type="submit" style="background:#9c27b0;">Опубликовать</button>
+                                    <button type="submit" style="background:#9c27b0;">Опубликовать на Доску</button>
                                 </form>
                             </div>
 
@@ -125,16 +129,31 @@ export default (db) => {
 
                         <hr>
                         
-                        <details>
-                            <summary style="cursor:pointer; text-align:center; color:#ccc;">🔽 Редактировать данные</summary>
-                            <form action="/update-availability" method="POST" style="margin-top:15px;">
-                                <input type="hidden" name="_csrf" value="${res.locals.csrfToken}">
-                                <label>Телефон:</label><input type="text" name="phone" value="${user.phone||''}">
-                                <label>Город:</label><input type="text" name="city" value="${user.city||''}">
-                                <label>Страна:</label><input type="text" name="country" value="${user.country||''}">
-                                <button type="submit">Сохранить</button>
-                            </form>
-                        </details>
+                        <h3>Ваши данные:</h3>
+                        <form action="/update-availability" method="POST">
+                            <input type="hidden" name="_csrf" value="${res.locals.csrfToken}">
+                            
+                            <label>Телефон:</label>
+                            <input type="text" name="phone" value="${user.phone||''}" placeholder="+7 (XXX) ...">
+                            
+                            <label>Город:</label>
+                            <input type="text" name="city" value="${user.city||''}" placeholder="Город">
+                            
+                            <label>Страна:</label>
+                            <input type="text" name="country" value="${user.country||''}" placeholder="Страна">
+                            
+                            <div class="checkbox-group" style="margin: 15px 0;">
+                                <label style="font-weight:bold; display:block; margin-bottom:5px;">Свободные дни:</label>
+                                <label><input type="checkbox" name="days" value="ПН" ${availability.days.includes('ПН')?'checked':''}> ПН</label>
+                                <label><input type="checkbox" name="days" value="СР" ${availability.days.includes('СР')?'checked':''}> СР</label>
+                                <label><input type="checkbox" name="days" value="ПТ" ${availability.days.includes('ПТ')?'checked':''}> ПТ</label>
+                            </div>
+                            
+                            <label>Удобное время:</label>
+                            <input type="text" name="time" value="${availability.time||''}" placeholder="Например: 18:00 - 20:00">
+
+                            <button type="submit">Сохранить изменения</button>
+                        </form>
 
                         <form action="/logout" method="POST" style="text-align:center;margin-top:20px;"><input type="hidden" name="_csrf" value="${res.locals.csrfToken}"><button type="submit" style="background:#dc3545">Выйти</button></form>
                     </div>
@@ -153,9 +172,14 @@ export default (db) => {
     });
 
     router.post('/update-availability', requireLogin, async (req, res) => {
-        await db.collection('users').updateOne({ _id: ObjectId.createFromHexString(req.session.user._id) }, { $set: { phone: req.body.phone, city: req.body.city, country: req.body.country } });
+        const days = Array.isArray(req.body.days) ? req.body.days : (req.body.days ? [req.body.days] : []);
+        await db.collection('users').updateOne(
+            { _id: ObjectId.createFromHexString(req.session.user._id) }, 
+            { $set: { phone: req.body.phone, city: req.body.city, country: req.body.country, availability: { days, time: req.body.time } } }
+        );
         res.redirect('/profile');
     });
+
     router.post("/post-comment", requireLogin, async (req, res) => {
         await db.collection("comments").insertOne({ authorName: req.session.user.name, text: req.body.commentText, createdAt: new Date() });
         await clearCache(LOGIN_PAGE_CACHE_KEY); res.redirect("/profile");

@@ -41,7 +41,7 @@ export default (db) => {
                         </form>` : ''
                     }
                 </div>
-            `).join('') || '<p style="text-align:center; color:#ccc; margin-top:50px;">Пока тишина... Зайдите в кабинет, чтобы предложить план!</p>';
+            `).join('') || '<p style="text-align:center; color:#ccc; margin-top:50px;">Пока тишина... Скоро здесь будут планы!</p>';
 
             res.send(`
                 <!DOCTYPE html>
@@ -61,8 +61,7 @@ export default (db) => {
                         .plan-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; font-size: 0.9em; color:#ccc; }
                         .plan-time { background: #9c27b0; color: white; padding: 3px 8px; border-radius: 4px; font-weight: bold; }
                         
-                        /* Стиль заголовка */
-                        .plan-text { font-size: 1.3em; margin-bottom: 10px; line-height: 1.4; cursor: pointer; color: white; text-decoration: underline; text-decoration-color: rgba(255,255,255,0.3); }
+                     .plan-text { font-size: 1.3em; margin-bottom: 10px; line-height: 1.4; cursor: pointer; color: white; text-decoration: underline; text-decoration-color: rgba(255,255,255,0.3); }
                         .plan-text:hover { color: #d4af37; }
 
                         .btn-reply-toggle { background: transparent; border: 1px solid #aaa; color: #aaa; padding: 5px 10px; border-radius: 20px; cursor: pointer; font-size: 0.8em; }
@@ -75,24 +74,12 @@ export default (db) => {
                         .btn-delete { background: #dc3545; color: white; border: none; padding: 5px 10px; border-radius: 5px; cursor: pointer; font-size: 12px; opacity: 0.7; }
 
                         a.back-link { display: block; text-align: center; color: #ccc; margin-top: 30px; text-decoration: none; font-size: 1.1em; }
-                        
-                        .info-box { background: rgba(156, 39, 176, 0.2); padding: 15px; border-radius: 10px; text-align: center; margin-bottom: 20px; border: 1px solid #9c27b0; }
-                    </style>
-                </head>
+                    </style> 
+                </head> 
                 <body>
                     <div class="container">
                         <h1>🌙 Кто что делает после 19:00?</h1>
                         
-                        ${!user ? `
-                            <div class="info-box">
-                                Хотите позвать людей? <a href="/login" style="color:#fff; font-weight:bold;">Войдите в кабинет</a>, чтобы создать объявление.
-                            </div>
-                        ` : `
-                            <div class="info-box">
-                                <a href="/profile" style="color:#d4af37; font-weight:bold; text-decoration:none;">➕ Написать своё объявление (в Кабинете)</a>
-                            </div>
-                        `}
-
                         <div class="plans-list">
                             ${listHtml}
                         </div>
@@ -100,15 +87,10 @@ export default (db) => {
                         <a href="/login" class="back-link">⬅ На Главную</a>
                     </div>
 
-                    <script>
-                        // Показать/Скрыть форму ответа
+                    <script> 
                         function toggleReply(id) {
                             const form = document.getElementById('reply-form-' + id);
-                            if (form.style.display === 'none') {
-                                form.style.display = 'block';
-                            } else {
-                                form.style.display = 'none';
-                            }
+                            form.style.display = (form.style.display === 'none') ? 'block' : 'none';
                         }
 
                         async function sendEveningMessage(e, toUserId, planTitle) {
@@ -131,7 +113,7 @@ export default (db) => {
                             if(res.ok) {
                                 alert('Сообщение отправлено автору! Ответ придет в Ваш кабинет.');
                                 form.msg.value = '';
-                                form.parentNode.style.display = 'none'; // Скрыть форму после отправки
+                                form.parentNode.style.display = 'none';
                             } else {
                                 alert('Ошибка отправки.');
                             }
@@ -154,8 +136,7 @@ export default (db) => {
                 contact: req.body.contact,
                 createdAt: new Date()
             });
-            // После создания перекидываем сразу на доску, чтобы увидеть результат
-            res.redirect('/evening');
+            res.redirect('/evening'); 
         } catch (e) { res.status(500).send("Ошибка"); }
     });
 
