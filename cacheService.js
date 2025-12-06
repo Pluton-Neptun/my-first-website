@@ -45,4 +45,4 @@ export async function clearCache(key) {
 }
 
 // Экспортируем сам клиент, если нужно
-export default redisClient;
+export default redisClient; 

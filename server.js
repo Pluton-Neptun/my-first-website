@@ -93,4 +93,4 @@ async function connectToDb() {
         console.error("❌ Ошибка запуска сервера:", error); 
     }
 }
-connectToDb();
+connectToDb(); 
