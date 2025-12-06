@@ -10,9 +10,7 @@ const requireLogin = (req, res, next) => {
 export default (db) => {
     const router = express.Router();
 
-    // ---------------------------------------
-    // 1. РЕГИСТРАЦИЯ И ВХОД
-    // ---------------------------------------
+    // 1. РЕГИСТРАЦИЯ И ВХОД 
     router.get('/register.html', (req, res) => res.redirect('/register')); 
     router.get('/register', (req, res) => {
         res.send(`<!DOCTYPE html><html lang="ru"><head><meta charset="UTF-8"><title>Регистрация</title><style>body{font-family:Arial;background:url('/images/background.jpg') center/cover;height:100vh;display:flex;justify-content:center;align-items:center}form{background:rgba(0,0,0,0.8);padding:30px;border-radius:10px;color:white;width:300px}input{width:95%;padding:10px;margin:10px 0;border-radius:5px}button{width:100%;padding:10px;background:#28a745;color:white;border:none;cursor:pointer}a{color:#6cafff;}</style></head><body><form action="/register" method="POST"><input type="hidden" name="_csrf" value="${res.locals.csrfToken}"><h2>Регистрация</h2><input type="text" name="name" placeholder="Имя" required><input type="email" name="email" placeholder="Email" required><input type="password" name="password" placeholder="Пароль" required><div style="margin:10px 0"><input type="checkbox" required> <label>Согласен с <a href="/privacy-policy" target="_blank">Политикой</a></label></div><button type="submit">Готово</button><br><br><a href="/login" style="display:block;text-align:center">Войти</a></form></body></html>`);
@@ -33,9 +31,7 @@ export default (db) => {
     });
     router.post("/logout", (req, res) => req.session.destroy(() => res.redirect('/')));
 
-    // ---------------------------------------
-    // 2. ПРОФИЛЬ (КАБИНЕТ)
-    // ---------------------------------------
+    // 2. ПРОФИЛЬ (КАБИНЕТ) 
     router.get("/profile", requireLogin, async (req, res) => {
         try {
             res.set('Cache-Control', 'public, max-age=0, must-revalidate'); 
@@ -43,11 +39,11 @@ export default (db) => {
             const availability = user.availability || { days: [], time: "" };
 
             // Загружаем сообщения
-          const allMessages = await db.collection('messages').find({ toUserId: user._id }).sort({ createdAt: -1 }).toArray();
+            const allMessages = await db.collection('messages').find({ toUserId: user._id }).sort({ createdAt: -1 }).toArray();
             const eveningMessages = allMessages.filter(m => m.source && m.source.includes('После 19:00'));
             const otherMessages = allMessages.filter(m => !m.source || !m.source.includes('После 19:00'));
 
-          const renderMsg = (m) => `
+            const renderMsg = (m) => `
                 <div class="msg-card">
                     <div class="msg-head">
                         <strong>От: ${m.fromContact}</strong> 
@@ -63,7 +59,7 @@ export default (db) => {
                     body{font-family:Arial;padding:20px;background:url('/images/background.jpg') center/cover fixed;color:white}
                     .content{background:rgba(0,0,0,0.9);padding:30px;border-radius:10px;max-width:700px;margin:auto;box-shadow:0 0 20px rgba(0,0,0,0.7);}
                     
-                    /* МЕНЮ КАБИНЕТА */
+                    /* МЕНЮ */
                     .nav-buttons { display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin-bottom:20px; }
                     .nav-btn { text-decoration:none; padding:12px 20px; border-radius:30px; font-weight:bold; color:white; transition:0.3s; text-align:center; }
                     .nav-btn:hover { transform:scale(1.05); }
@@ -78,7 +74,7 @@ export default (db) => {
                     .msg-source { font-size:0.8em; color:#d4af37; margin-bottom:5px; font-weight:bold; }
                     hr { border:0; border-top:1px solid #555; margin:20px 0; }
                     
-                    /* ФОРМА СОЗДАНИЯ ВЕЧЕРНЕГО ПЛАНА (НОВАЯ) */
+                    /* ФОРМА СОЗДАНИЯ (Теперь внутри таба) */
                     .create-plan-box { background: rgba(156, 39, 176, 0.2); padding: 15px; border-radius: 8px; border: 1px solid #9c27b0; margin-bottom: 20px; }
                     
                     .tabs { display:flex; justify-content:center; gap:20px; margin-bottom:15px; border-bottom:1px solid #555; padding-bottom:10px; }
@@ -96,33 +92,35 @@ export default (db) => {
                             <a href="/evening" class="nav-btn btn-evening">🌙 Доска "После 19:00"</a>
                         </div>
                         
-                        <div class="create-plan-box">
-                            <h3 style="color:#d4af37; margin-top:0;">📢 Опубликовать на "После 19:00"</h3>
-                            <form action="/evening/add" method="POST">
-                                <input type="hidden" name="_csrf" value="${res.locals.csrfToken}">
-                                <div style="display:flex; gap:10px;">
-                                    <input type="text" name="time" placeholder="Время (20:00)" required style="width:30%;">
-                                    <input type="text" name="contact" value="${user.phone||''}" placeholder="Ваш контакт" required style="width:70%;">
-                                </div>
-                                <textarea name="text" placeholder="Заголовок: Иду в кино, кто со мной? / Кальян / Прогулка..." required style="height:60px;"></textarea>
-                                <button type="submit" style="background:#9c27b0;">Опубликовать на Доску</button>
-                            </form>
-                        </div>
-                        
                         <hr>
 
-                        <h3>📬 Входящие сообщения</h3>
+                        <h3>📬 Ваши Сообщения</h3>
                         <div class="tabs">
                             <span class="tab-link active" onclick="showTab('tab-all')">Общие (${otherMessages.length})</span>
                             <span class="tab-link" onclick="showTab('tab-evening')" style="color:#d4af37;">🌙 После 19:00 (${eveningMessages.length})</span>
                         </div>
 
-                        <div id="tab-all" class="tab-content active" style="max-height:300px; overflow-y:auto;">
+                        <div id="tab-all" class="tab-content active" style="max-height:400px; overflow-y:auto;">
                             ${otherMessages.length > 0 ? otherMessages.map(renderMsg).join('') : '<p style="text-align:center;color:#777">Нет новых сообщений.</p>'}
                         </div>
 
-                        <div id="tab-evening" class="tab-content" style="max-height:300px; overflow-y:auto;">
-                            ${eveningMessages.length > 0 ? eveningMessages.map(renderMsg).join('') : '<p style="text-align:center;color:#777">Пока никто не ответил на ваши планы.</p>'}
+                        <div id="tab-evening" class="tab-content" style="max-height:500px; overflow-y:auto;">
+                            
+                            <div class="create-plan-box">
+                                <h3 style="color:#d4af37; margin-top:0;">📢 Опубликовать на Доску</h3>
+                                <form action="/evening/add" method="POST">
+                                    <input type="hidden" name="_csrf" value="${res.locals.csrfToken}">
+                                    <div style="display:flex; gap:10px;">
+                                        <input type="text" name="time" placeholder="Время (20:00)" required style="width:30%;">
+                                        <input type="text" name="contact" value="${user.phone||''}" placeholder="Ваш контакт" required style="width:70%;">
+                                    </div>
+                                    <textarea name="text" placeholder="Заголовок: Иду в кино... / Кальян / Прогулка..." required style="height:60px;"></textarea>
+                                    <button type="submit" style="background:#9c27b0;">Опубликовать</button>
+                                </form>
+                            </div>
+
+                            <h4 style="color:#ccc; text-align:center;">Ответы на ваши планы:</h4>
+                            ${eveningMessages.length > 0 ? eveningMessages.map(renderMsg).join('') : '<p style="text-align:center;color:#777">Пока никто не ответил.</p>'}
                         </div>
 
                         <hr>
@@ -134,7 +132,7 @@ export default (db) => {
                                 <label>Телефон:</label><input type="text" name="phone" value="${user.phone||''}">
                                 <label>Город:</label><input type="text" name="city" value="${user.city||''}">
                                 <label>Страна:</label><input type="text" name="country" value="${user.country||''}">
-                             <button type="submit">Сохранить</button>
+                                <button type="submit">Сохранить</button>
                             </form>
                         </details>
 
@@ -161,7 +159,7 @@ export default (db) => {
     router.post("/post-comment", requireLogin, async (req, res) => {
         await db.collection("comments").insertOne({ authorName: req.session.user.name, text: req.body.commentText, createdAt: new Date() });
         await clearCache(LOGIN_PAGE_CACHE_KEY); res.redirect("/profile");
-    }); 
+    });
     router.get('/privacy-policy', (req, res) => res.send(`<h2>Политика</h2><p>Данные защищены.</p>`));
     router.get("/activities", async (req, res) => { res.redirect('/login'); });
 
