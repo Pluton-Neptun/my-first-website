@@ -1,16 +1,14 @@
 // cacheService.js
 import { createClient } from 'redis';
 
-export const LOGIN_PAGE_CACHE_KEY = 'login_page_cache'; // Экспортируем ключ
+export const LOGIN_PAGE_CACHE_KEY = 'login_page_cache'; 
 const DEFAULT_EXPIRATION = 3600; // 1 час кэша
 
-// Настройка для Render: если есть REDIS_URL, парсим его
-const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
+const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379'; 
 
 const clientOptions = {
     url: redisUrl,
-    socket: {
-        // ВАЖНО ДЛЯ RENDER: Разрешаем самоподписанные сертификаты SSL
+    socket: { 
         tls: redisUrl.startsWith('rediss://'),
         rejectUnauthorized: false 
     }
@@ -20,8 +18,7 @@ const redisClient = createClient(clientOptions);
 
 redisClient.on('error', (err) => console.error('Redis Client Error', err));
 
-// Автоматическое подключение при старте
-(async () => {
+(async () => { 
     try {
         if (!redisClient.isOpen) {
             await redisClient.connect();
@@ -32,7 +29,33 @@ redisClient.on('error', (err) => console.error('Redis Client Error', err));
     }
 })();
 
-// Функция очистки кэша
+// НОВЫЕ ЭКСПОРТЫ: getCache и setCache
+export async function getCache(key) {
+    try {
+        if (redisClient.isOpen) {
+            const data = await redisClient.get(key);
+            if (data !== null) {
+                return JSON.parse(data);
+            }
+        }
+        return null;
+    } catch (err) {
+        console.error('Error getting cache:', err);
+        return null;
+    }
+}
+
+export async function setCache(key, value, duration = DEFAULT_EXPIRATION) {
+    try {
+        if (redisClient.isOpen) {
+            await redisClient.setEx(key, duration, JSON.stringify(value));
+        }
+    } catch (err) {
+        console.error('Error setting cache:', err);
+    }
+}
+
+// Существующий экспорт:
 export async function clearCache(key) {
     try {
         if (redisClient.isOpen) {
@@ -44,5 +67,4 @@ export async function clearCache(key) {
     }
 }
 
-// Экспортируем сам клиент, если нужно
-export default redisClient; 
+export default redisClient;
