@@ -10,9 +10,11 @@ const requireLogin = (req, res, next) => {
 export default (db) => {
     const router = express.Router();
 
-    // 1. РЕГИСТРАЦИЯ И ВХОД 
+    // ---------------------------------------
+    // 1. РЕГИСТРАЦИЯ И ВХОД
+    // ---------------------------------------
     router.get('/register.html', (req, res) => res.redirect('/register')); 
-    router.get('/register', (req, res) => { 
+    router.get('/register', (req, res) => {
         res.send(`<!DOCTYPE html><html lang="ru"><head><meta charset="UTF-8"><title>Регистрация</title><style>body{font-family:Arial;background:url('/images/background.jpg') center/cover;height:100vh;display:flex;justify-content:center;align-items:center}form{background:rgba(0,0,0,0.8);padding:30px;border-radius:10px;color:white;width:300px}input{width:95%;padding:10px;margin:10px 0;border-radius:5px}button{width:100%;padding:10px;background:#28a745;color:white;border:none;cursor:pointer}a{color:#6cafff;}</style></head><body><form action="/register" method="POST"><input type="hidden" name="_csrf" value="${res.locals.csrfToken}"><h2>Регистрация</h2><input type="text" name="name" placeholder="Имя" required><input type="email" name="email" placeholder="Email" required><input type="password" name="password" placeholder="Пароль" required><div style="margin:10px 0"><input type="checkbox" required> <label>Согласен с <a href="/privacy-policy" target="_blank">Политикой</a></label></div><button type="submit">Готово</button><br><br><a href="/login" style="display:block;text-align:center">Войти</a></form></body></html>`);
     });
 
@@ -28,10 +30,12 @@ export default (db) => {
     router.post("/login", async (req, res) => {
         const user = await db.collection("users").findOne({ email: req.body.email, password: req.body.password });
         if (user) { req.session.user = user; res.redirect("/profile"); } else { res.send("Ошибка входа"); }
-    }); 
+    });
     router.post("/logout", (req, res) => req.session.destroy(() => res.redirect('/')));
 
+    // ---------------------------------------
     // 2. ПРОФИЛЬ (КАБИНЕТ)
+    // ---------------------------------------
     router.get("/profile", requireLogin, async (req, res) => {
         try {
             res.set('Cache-Control', 'public, max-age=0, must-revalidate'); 
@@ -39,14 +43,11 @@ export default (db) => {
             const availability = user.availability || { days: [], time: "" };
 
             // Загружаем сообщения
-            const allMessages = await db.collection('messages').find({ toUserId: user._id }).sort({ createdAt: -1 }).toArray();
-            
-            // Фильтруем сообщения "После 19:00" отдельно
+          const allMessages = await db.collection('messages').find({ toUserId: user._id }).sort({ createdAt: -1 }).toArray();
             const eveningMessages = allMessages.filter(m => m.source && m.source.includes('После 19:00'));
             const otherMessages = allMessages.filter(m => !m.source || !m.source.includes('После 19:00'));
 
-            // Функция для красивого отображения сообщения
-            const renderMsg = (m) => `
+          const renderMsg = (m) => `
                 <div class="msg-card">
                     <div class="msg-head">
                         <strong>От: ${m.fromContact}</strong> 
@@ -77,7 +78,9 @@ export default (db) => {
                     .msg-source { font-size:0.8em; color:#d4af37; margin-bottom:5px; font-weight:bold; }
                     hr { border:0; border-top:1px solid #555; margin:20px 0; }
                     
-                    /* Табы для сообщений */
+                    /* ФОРМА СОЗДАНИЯ ВЕЧЕРНЕГО ПЛАНА (НОВАЯ) */
+                    .create-plan-box { background: rgba(156, 39, 176, 0.2); padding: 15px; border-radius: 8px; border: 1px solid #9c27b0; margin-bottom: 20px; }
+                    
                     .tabs { display:flex; justify-content:center; gap:20px; margin-bottom:15px; border-bottom:1px solid #555; padding-bottom:10px; }
                     .tab-link { color:#aaa; cursor:pointer; font-size:1.1em; }
                     .tab-link.active { color:white; font-weight:bold; border-bottom:2px solid white; }
@@ -90,7 +93,20 @@ export default (db) => {
                         <div class="nav-buttons">
                             <a href="/work" class="nav-btn btn-cocktail">🍹 Коктейль</a>
                             <a href="/activities" class="nav-btn btn-activities">⚽ Активности</a>
-                            <a href="/evening" class="nav-btn btn-evening">🌙 После 19:00 (Доска)</a>
+                            <a href="/evening" class="nav-btn btn-evening">🌙 Доска "После 19:00"</a>
+                        </div>
+                        
+                        <div class="create-plan-box">
+                            <h3 style="color:#d4af37; margin-top:0;">📢 Опубликовать на "После 19:00"</h3>
+                            <form action="/evening/add" method="POST">
+                                <input type="hidden" name="_csrf" value="${res.locals.csrfToken}">
+                                <div style="display:flex; gap:10px;">
+                                    <input type="text" name="time" placeholder="Время (20:00)" required style="width:30%;">
+                                    <input type="text" name="contact" value="${user.phone||''}" placeholder="Ваш контакт" required style="width:70%;">
+                                </div>
+                                <textarea name="text" placeholder="Заголовок: Иду в кино, кто со мной? / Кальян / Прогулка..." required style="height:60px;"></textarea>
+                                <button type="submit" style="background:#9c27b0;">Опубликовать на Доску</button>
+                            </form>
                         </div>
                         
                         <hr>
@@ -112,14 +128,13 @@ export default (db) => {
                         <hr>
                         
                         <details>
-                            <summary style="cursor:pointer; text-align:center; color:#ccc;">🔽 Редактировать мои данные</summary>
+                            <summary style="cursor:pointer; text-align:center; color:#ccc;">🔽 Редактировать данные</summary>
                             <form action="/update-availability" method="POST" style="margin-top:15px;">
                                 <input type="hidden" name="_csrf" value="${res.locals.csrfToken}">
                                 <label>Телефон:</label><input type="text" name="phone" value="${user.phone||''}">
                                 <label>Город:</label><input type="text" name="city" value="${user.city||''}">
                                 <label>Страна:</label><input type="text" name="country" value="${user.country||''}">
-                                <label>Время:</label><input type="text" name="time" value="${availability.time||''}">
-                                <button type="submit">Сохранить</button>
+                             <button type="submit">Сохранить</button>
                             </form>
                         </details>
 
@@ -140,20 +155,15 @@ export default (db) => {
     });
 
     router.post('/update-availability', requireLogin, async (req, res) => {
-        await db.collection('users').updateOne({ _id: ObjectId.createFromHexString(req.session.user._id) }, { $set: { phone: req.body.phone, city: req.body.city, country: req.body.country, availability: { time: req.body.time } } });
+        await db.collection('users').updateOne({ _id: ObjectId.createFromHexString(req.session.user._id) }, { $set: { phone: req.body.phone, city: req.body.city, country: req.body.country } });
         res.redirect('/profile');
-    }); 
+    });
     router.post("/post-comment", requireLogin, async (req, res) => {
         await db.collection("comments").insertOne({ authorName: req.session.user.name, text: req.body.commentText, createdAt: new Date() });
         await clearCache(LOGIN_PAGE_CACHE_KEY); res.redirect("/profile");
-    });
-
-    // 3. ПОЛИТИКА КОНФИДЕНЦИАЛЬНОСТИ
+    }); 
     router.get('/privacy-policy', (req, res) => res.send(`<h2>Политика</h2><p>Данные защищены.</p>`));
-
-    // 4. АКТИВНОСТИ (Оставляем как было, сокращенно для примера)
-    router.get("/activities", async (req, res) => { res.redirect('/login'); /* Тут должен быть код списка активностей */ });
-    // ... остальной код активностей ...
+    router.get("/activities", async (req, res) => { res.redirect('/login'); });
 
     return router;
 };
