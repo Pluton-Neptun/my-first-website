@@ -1,59 +1,48 @@
 // cacheService.js
 import { createClient } from 'redis';
 
+export const LOGIN_PAGE_CACHE_KEY = 'login_page_cache'; // Экспортируем ключ
 const DEFAULT_EXPIRATION = 3600; // 1 час кэша
 
-const redisClient = createClient({ 
-    url: process.env.REDIS_URL || 'redis://localhost:6379'
-});
-redisClient.on('error', (err) => console.error('Redis Client Error', err)); 
+// Настройка для Render: если есть REDIS_URL, парсим его
+const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
 
-async function connectRedis() {
-    try {
-        if (!redisClient.isReady) {
-            await redisClient.connect(); 
-            console.log("Успешно подключились к Redis");
-        }
-        return redisClient;
-    } catch (error) {
-        console.error("Не удалось подключиться к Redis", error);
-        throw error;
+const clientOptions = {
+    url: redisUrl,
+    socket: {
+        // ВАЖНО ДЛЯ RENDER: Разрешаем самоподписанные сертификаты SSL
+        tls: redisUrl.startsWith('rediss://'),
+        rejectUnauthorized: false 
     }
-}
-
-async function setCache(key, value, options = { EX: DEFAULT_EXPIRATION }) {
-    if (redisClient.isReady) {
-        await redisClient.set(key, JSON.stringify(value), options);
-    }
-}
-
-async function getCache(key) {
-    if (redisClient.isReady) {
-        const cachedValue = await redisClient.get(key);
-        return cachedValue ? JSON.parse(cachedValue) : null;
-    }
-    return null;
-}
-
-async function clearCache(key) {
-    if (redisClient.isReady) {
-        if (key.endsWith('*')) { 
-            const keys = await redisClient.keys(key);
-            if (keys.length > 0) {
-                await redisClient.del(keys);
-            }
-        } else {
-            await redisClient.del(key);
-        }
-    }
-}
-
-const LOGIN_PAGE_CACHE_KEY = 'loginPageData';
-
-export { 
-    connectRedis,
-    setCache, 
-    getCache, 
-    clearCache, 
-    LOGIN_PAGE_CACHE_KEY 
 };
+
+const redisClient = createClient(clientOptions);
+
+redisClient.on('error', (err) => console.error('Redis Client Error', err));
+
+// Автоматическое подключение при старте
+(async () => {
+    try {
+        if (!redisClient.isOpen) {
+            await redisClient.connect();
+            console.log("✅ Успешно подключились к Redis (cacheService)");
+        }
+    } catch (err) {
+        console.error("❌ Ошибка подключения Redis:", err);
+    }
+})();
+
+// Функция очистки кэша
+export async function clearCache(key) {
+    try {
+        if (redisClient.isOpen) {
+            await redisClient.del(key);
+            console.log(`Cache cleared for key: ${key}`);
+        }
+    } catch (err) {
+        console.error('Error clearing cache:', err);
+    }
+}
+
+// Экспортируем сам клиент, если нужно
+export default redisClient;
