@@ -44,7 +44,7 @@ export default (db) => {
                     .nav-btn:hover { transform:scale(1.05); }
                     .btn-cocktail { background: linear-gradient(45deg, #ff9800, #ff5722); }
                     .btn-activities { background: linear-gradient(45deg, #2196f3, #00bcd4); }
-                    .btn-evening { background: linear-gradient(45deg, #9c27b0, #673ab7); border: 2px solid #d4af37; }
+                    /* Кнопка Доски убрана отсюда */
 
                     h2,h3{text-align:center}
                     input,button,textarea{width:95%;padding:10px;margin:5px 0;border-radius:5px;box-sizing:border-box}
@@ -53,7 +53,7 @@ export default (db) => {
                     .msg-source { font-size:0.8em; color:#d4af37; margin-bottom:5px; font-weight:bold; }
                     hr { border:0; border-top:1px solid #555; margin:20px 0; }
                     
-                    /* ФОРМА (Теперь внутри таба) */
+                    /* ФОРМА (Внутри таба) */
                     .create-plan-box { background: rgba(156, 39, 176, 0.2); padding: 15px; border-radius: 8px; border: 1px solid #9c27b0; margin-bottom: 10px; }
                     
                     /* ТАБЫ */
@@ -74,8 +74,7 @@ export default (db) => {
                         <div class="nav-buttons">
                             <a href="/work" class="nav-btn btn-cocktail">🍹 Коктейль</a>
                             <a href="/activities" class="nav-btn btn-activities">⚽ Активности</a>
-                            <a href="/evening" class="nav-btn btn-evening">🌙 Доска (Смотреть)</a>
-                        </div>
+                     </div>
                         
                         <hr>
 
