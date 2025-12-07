@@ -10,7 +10,7 @@ const requireLogin = (req, res, next) => {
 export default (db) => {
     const router = express.Router();
 
-    // ГЛАВНАЯ СТРАНИЦА ПРОФИЛЯ
+    // 1. ГЛАВНАЯ СТРАНИЦА ПРОФИЛЯ
     router.get("/", requireLogin, async (req, res) => {
         try {
             res.set('Cache-Control', 'public, max-age=0, must-revalidate'); 
@@ -44,7 +44,7 @@ export default (db) => {
                     .nav-btn:hover { transform:scale(1.05); }
                     
                     .btn-cocktail { background: linear-gradient(45deg, #ff9800, #ff5722); }
-                  .btn-activities { background: linear-gradient(45deg, #2196f3, #00bcd4); }
+                    .btn-activities { background: linear-gradient(45deg, #2196f3, #00bcd4); }
                     .btn-publish { background: linear-gradient(45deg, #e056fd, #be2edd); border: 2px solid #fff; }
 
                     h2,h3{text-align:center}
@@ -53,10 +53,7 @@ export default (db) => {
                     .msg-card { background:rgba(255,255,255,0.1); padding:10px; margin-bottom:10px; border-radius:5px; border-left:4px solid #00c3ff; }
                     .msg-source { font-size:0.8em; color:#d4af37; margin-bottom:5px; font-weight:bold; }
                     hr { border:0; border-top:1px solid #555; margin:20px 0; }
-                    
-                    /* ФОРМА (Внутри таба) */
-                    .create-plan-box { background: rgba(156, 39, 176, 0.2); padding: 15px; border-radius: 8px; border: 1px solid #9c27b0; margin-bottom: 10px; }
-                    
+                  
                     /* ТАБЫ */
                     .tabs { display:flex; justify-content:center; gap:20px; margin-bottom:15px; border-bottom:1px solid #555; padding-bottom:10px; flex-wrap:wrap;}
                     .tab-link { color:#aaa; cursor:pointer; font-size:1.1em; padding: 5px 10px; border-radius: 5px; transition: 0.3s;}
@@ -75,7 +72,7 @@ export default (db) => {
                         <div class="nav-buttons">
                             <a href="/work" class="nav-btn btn-cocktail">🍹 Коктейль</a>
                             <a href="/activities" class="nav-btn btn-activities">⚽ Активности</a>
-                            <a onclick="showTab('tab-publish')" class="nav-btn btn-publish">📝 Опубликовать</a>
+                            <a href="/profile/create-evening" class="nav-btn btn-publish">🌙 После 19:00</a>
                         </div>
                         
                         <hr>
@@ -83,7 +80,7 @@ export default (db) => {
                         <div class="tabs">
                             <span class="tab-link active" onclick="showTab('tab-all')" id="link-tab-all">📬 Входящие</span>
                             <span class="tab-link" onclick="showTab('tab-evening')" id="link-tab-evening" style="color:#d4af37;">💬 Ответы</span>
-                     </div>
+                        </div>
 
                         <div id="tab-all" class="tab-content active" style="max-height:400px; overflow-y:auto;">
                             ${otherMessages.length > 0 ? otherMessages.map(renderMsg).join('') : '<p style="text-align:center;color:#777">Нет новых сообщений.</p>'}
@@ -92,24 +89,7 @@ export default (db) => {
                         <div id="tab-evening" class="tab-content" style="max-height:400px; overflow-y:auto;">
                             <h4 style="color:#ccc; text-align:center;">Вам ответили на планы:</h4>
                             ${eveningMessages.length > 0 ? eveningMessages.map(renderMsg).join('') : '<p style="text-align:center;color:#777">Пока ответов нет.</p>'}
-                        </div>
-
-                        <div id="tab-publish" class="tab-content">
-                             <div class="create-plan-box">
-                                <h3 style="color:#d4af37; margin-top:0;">Добавить на Доску "После 19:00"</h3>
-                                <form action="/evening/add" method="POST">
-                                    <input type="hidden" name="_csrf" value="${res.locals.csrfToken}">
-                                    <div style="display:flex; gap:10px;">
-                                        <input type="text" name="time" placeholder="Время (20:00)" required style="width:30%;">
-                                        <input type="text" name="contact" value="${user.phone||''}" placeholder="Ваш контакт" required style="width:70%;">
-                                    </div>
-                                    <textarea name="text" placeholder="Заголовок: Иду в кино... / Кальян / Прогулка..." required style="height:60px;"></textarea>
-                                    <button type="submit" style="background:#9c27b0;">Опубликовать на Доску</button>
-                                </form>
-                            </div>
-                            <p style="text-align:center; color:#aaa; font-size:0.9em;">Ваше объявление появится на <a href="/evening" style="color:#e056fd">общей доске</a>.</p>
-                        </div>
-
+                        </div>  
                         <hr>
                         
                         <h3>Ваши данные:</h3>
@@ -140,16 +120,10 @@ export default (db) => {
 
                     <script>
                         function showTab(id) {
-                            // Скрываем все табы
-                            document.querySelectorAll('.tab-content').forEach(d => d.classList.remove('active'));
+                          document.querySelectorAll('.tab-content').forEach(d => d.classList.remove('active'));
                             document.querySelectorAll('.tab-link').forEach(l => l.classList.remove('active'));
-                            
-                            // Показываем нужный
-                            document.getElementById(id).classList.add('active');
-                            
-                            // Подсвечиваем ссылку в табах (если она есть)
-                            const link = document.getElementById('link-' + id);
-                            if(link) link.classList.add('active');
+                         document.getElementById(id).classList.add('active');
+                            document.getElementById('link-'+id).classList.add('active');
                         }
                     </script>
                 </body></html>
@@ -157,6 +131,48 @@ export default (db) => {
         } catch (error) { res.status(500).send("Ошибка."); }
     });
 
+    // 2. НОВАЯ ОТДЕЛЬНАЯ СТРАНИЦА "ПОСЛЕ 19:00"
+    router.get("/create-evening", requireLogin, async (req, res) => {
+        const user = await db.collection('users').findOne({ _id: ObjectId.createFromHexString(req.session.user._id) });
+        
+        res.send(`
+            <html><head><meta charset="UTF-8"><title>После 19:00</title><script src="/ga.js"></script><style>
+                body{font-family:Arial;padding:20px;background:url('/images/background.jpg') center/cover fixed;color:white}
+                .content{background:rgba(0,0,0,0.9);padding:30px;border-radius:10px;max-width:600px;margin:50px auto;box-shadow:0 0 20px rgba(0,0,0,0.7);}
+                h2{text-align:center; color: #e056fd;}
+                input,button,textarea{width:100%;padding:12px;margin:8px 0;border-radius:5px;box-sizing:border-box}
+                button{background: linear-gradient(45deg, #e056fd, #be2edd); color:white;border:none;cursor:pointer; font-weight:bold; font-size:1.1em;}
+                button:hover{opacity:0.9;}
+                .btn-back{display:block; text-align:center; color:#ccc; margin-top:15px; text-decoration:none;}
+            </style></head>
+            <body>
+                <div class="content">
+                    <h2>🌙 Опубликовать: После 19:00</h2>
+                    <p style="text-align:center; color:#aaa; margin-bottom:20px;">Ваше объявление появится на общей доске.</p>
+                    
+                    <form action="/evening/add" method="POST">
+                        <input type="hidden" name="_csrf" value="${res.locals.csrfToken}">
+                        
+                        <label>Ваше время:</label>
+                        <input type="text" name="time" placeholder="Пример: 20:30" required>
+                        
+                        <label>Ваш контакт:</label>
+                        <input type="text" name="contact" value="${user.phone||''}" placeholder="Телефон или Telegram" required>
+                        
+                        <label>Ваши планы:</label>
+                        <textarea name="text" placeholder="Иду в кино / Ищу компанию на ужин / Кальян..." required style="height:100px;"></textarea>
+                        
+                        <button type="submit">Опубликовать</button>
+                    </form>
+                    
+                    <a href="/profile" class="btn-back">⬅ Вернуться в кабинет</a>
+                </div>
+            </body>
+            </html>
+        `);
+    });
+
+    // 3. ОБРАБОТЧИКИ ФОРМ
     router.post('/update-availability', requireLogin, async (req, res) => {
         const days = Array.isArray(req.body.days) ? req.body.days : (req.body.days ? [req.body.days] : []);
         await db.collection('users').updateOne(
