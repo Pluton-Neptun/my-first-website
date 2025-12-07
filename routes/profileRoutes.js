@@ -44,8 +44,7 @@ export default (db) => {
                     .nav-btn:hover { transform:scale(1.05); }
                     
                     .btn-cocktail { background: linear-gradient(45deg, #ff9800, #ff5722); }
-                    .btn-activities { background: linear-gradient(45deg, #2196f3, #00bcd4); }
-                    /* Новая кнопка Опубликовать (Фиолетовая) */
+                  .btn-activities { background: linear-gradient(45deg, #2196f3, #00bcd4); }
                     .btn-publish { background: linear-gradient(45deg, #e056fd, #be2edd); border: 2px solid #fff; }
 
                     h2,h3{text-align:center}
@@ -84,8 +83,7 @@ export default (db) => {
                         <div class="tabs">
                             <span class="tab-link active" onclick="showTab('tab-all')" id="link-tab-all">📬 Входящие</span>
                             <span class="tab-link" onclick="showTab('tab-evening')" id="link-tab-evening" style="color:#d4af37;">💬 Ответы</span>
-                            <span class="tab-link" onclick="showTab('tab-publish')" id="link-tab-publish" style="color:#e056fd;">Создать</span>
-                        </div>
+                     </div>
 
                         <div id="tab-all" class="tab-content active" style="max-height:400px; overflow-y:auto;">
                             ${otherMessages.length > 0 ? otherMessages.map(renderMsg).join('') : '<p style="text-align:center;color:#777">Нет новых сообщений.</p>'}
