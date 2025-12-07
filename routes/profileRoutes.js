@@ -40,11 +40,13 @@ export default (db) => {
                     
                     /* КНОПКИ */
                     .nav-buttons { display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin-bottom:20px; }
-                    .nav-btn { text-decoration:none; padding:12px 20px; border-radius:30px; font-weight:bold; color:white; transition:0.3s; text-align:center; }
+                    .nav-btn { text-decoration:none; padding:12px 20px; border-radius:30px; font-weight:bold; color:white; transition:0.3s; text-align:center; cursor: pointer; }
                     .nav-btn:hover { transform:scale(1.05); }
+                    
                     .btn-cocktail { background: linear-gradient(45deg, #ff9800, #ff5722); }
                     .btn-activities { background: linear-gradient(45deg, #2196f3, #00bcd4); }
-                    /* Кнопка Доски убрана отсюда */
+                    /* Новая кнопка Опубликовать (Фиолетовая) */
+                    .btn-publish { background: linear-gradient(45deg, #e056fd, #be2edd); border: 2px solid #fff; }
 
                     h2,h3{text-align:center}
                     input,button,textarea{width:95%;padding:10px;margin:5px 0;border-radius:5px;box-sizing:border-box}
@@ -74,14 +76,15 @@ export default (db) => {
                         <div class="nav-buttons">
                             <a href="/work" class="nav-btn btn-cocktail">🍹 Коктейль</a>
                             <a href="/activities" class="nav-btn btn-activities">⚽ Активности</a>
-                     </div>
+                            <a onclick="showTab('tab-publish')" class="nav-btn btn-publish">📝 Опубликовать</a>
+                        </div>
                         
                         <hr>
 
                         <div class="tabs">
-                            <span class="tab-link active" onclick="showTab('tab-all')">📬 Входящие</span>
-                            <span class="tab-link" onclick="showTab('tab-evening')" style="color:#d4af37;">💬 Ответы</span>
-                            <span class="tab-link" onclick="showTab('tab-publish')" style="color:#e056fd;">📝 Опубликовать</span>
+                            <span class="tab-link active" onclick="showTab('tab-all')" id="link-tab-all">📬 Входящие</span>
+                            <span class="tab-link" onclick="showTab('tab-evening')" id="link-tab-evening" style="color:#d4af37;">💬 Ответы</span>
+                            <span class="tab-link" onclick="showTab('tab-publish')" id="link-tab-publish" style="color:#e056fd;">Создать</span>
                         </div>
 
                         <div id="tab-all" class="tab-content active" style="max-height:400px; overflow-y:auto;">
@@ -139,10 +142,16 @@ export default (db) => {
 
                     <script>
                         function showTab(id) {
+                            // Скрываем все табы
                             document.querySelectorAll('.tab-content').forEach(d => d.classList.remove('active'));
                             document.querySelectorAll('.tab-link').forEach(l => l.classList.remove('active'));
+                            
+                            // Показываем нужный
                             document.getElementById(id).classList.add('active');
-                            event.target.classList.add('active');
+                            
+                            // Подсвечиваем ссылку в табах (если она есть)
+                            const link = document.getElementById('link-' + id);
+                            if(link) link.classList.add('active');
                         }
                     </script>
                 </body></html>
