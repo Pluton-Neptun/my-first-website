@@ -1,13 +1,20 @@
 import express from 'express';
 import path from 'path';
 import { ObjectId } from "mongodb";
-import fs from 'fs';
+import multer from 'multer'; // Импортируем Multer здесь для настройки памяти
 import { clearCache, LOGIN_PAGE_CACHE_KEY } from '../cacheService.js';
 
 const __dirname = path.resolve();
 const requireLogin = (req, res, next) => { if (req.session.user) next(); else return res.redirect("/login"); };
 
-export default (db, upload) => {
+// НАСТРОЙКА ЗАГРУЗКИ В ПАМЯТЬ (Для Render)
+const storage = multer.memoryStorage();
+const uploadMemory = multer({ 
+    storage: storage,
+    limits: { fileSize: 10 * 1024 * 1024 } // Ограничение 10MB (чтобы база не лопнула)
+});
+
+export default (db, uploadDisk) => { // uploadDisk нам больше не нужен, используем uploadMemory
     const router = express.Router();
 
     // СТРАНИЦА КАБИНЕТА
@@ -100,9 +107,10 @@ export default (db, upload) => {
                  document.getElementById('upload-form').addEventListener('submit', async (e) => {
                         e.preventDefault();
                         const formData = new FormData(e.target);
+                        // Отправляем с заголовком CSRF
                         await fetch('/work/upload', { method: 'POST', body: formData, headers: {'x-csrf-token': CSRF_TOKEN} });
                         loadTasks();
-                        alert('Фото загружено в Галерею!');
+                        alert('Фото загружено в Галерею (Надежно)!');
                         e.target.reset();
                     });
 
@@ -171,28 +179,49 @@ export default (db, upload) => {
         `);
     });
 
-  router.post('/upload', requireLogin, upload.single('document'), async (req, res) => {
+  // ИСПРАВЛЕННЫЙ РОУТ ЗАГРУЗКИ (В БАЗУ ДАННЫХ)
+  router.post('/upload', requireLogin, uploadMemory.single('document'), async (req, res) => {
         try {
+            if (!req.file) return res.status(400).json({ error: 'Нет файла' });
+
+            // Конвертируем картинку в строку Base64
+            const imgBase64 = req.file.buffer.toString('base64');
+
             await db.collection('tasks').insertOne({
-                originalName: req.file.originalname, fileName: req.file.filename, path: req.file.path,
+                originalName: req.file.originalname, 
+                fileName: req.file.originalname, // Имя оставляем для совместимости
+                // path: ... путь больше не нужен
+                imageBase64: imgBase64, // <-- ВОТ САМО ФОТО
+                mimetype: req.file.mimetype, // Тип файла (jpg/png)
                 uploadedBy: req.session.user.name, 
                 userId: ObjectId.createFromHexString(req.session.user._id), 
-                status: req.body.status || 'busy', amount: req.body.amount || '',
+                status: req.body.status || 'busy', 
+                amount: req.body.amount || '',
                 createdAt: new Date()
             });
             await clearCache(LOGIN_PAGE_CACHE_KEY); 
             res.json({ status: 'ok' });
-        } catch (error) { res.status(500).json({ error: 'Err' }); }
+        } catch (error) { 
+            console.error(error);
+            res.status(500).json({ error: 'Err' }); 
+        }
     });
 
     router.get('/tasks', requireLogin, async (req, res) => { 
-        const tasks = await db.collection('tasks').find({ userId: ObjectId.createFromHexString(req.session.user._id) }).sort({ createdAt: -1 }).toArray(); 
+        // При загрузке списка не тянем саму картинку (она тяжелая), только инфо
+        // Используем projection чтобы исключить imageBase64 из списка (экономия трафика)
+        const tasks = await db.collection('tasks')
+            .find({ userId: ObjectId.createFromHexString(req.session.user._id) })
+            .project({ imageBase64: 0 }) // Не загружаем картинку в админке, только имя
+            .sort({ createdAt: -1 })
+            .toArray(); 
         res.json(tasks);
     });
 
     router.delete('/tasks/:id', requireLogin, async (req, res) => {
-        const t = await db.collection('tasks').findOne({ _id: ObjectId.createFromHexString(req.params.id) });
-        if(t) { try { fs.unlinkSync(t.path); } catch(e){} await db.collection('tasks').deleteOne({ _id: t._id }); await clearCache(LOGIN_PAGE_CACHE_KEY); }
+        // Удаляем только из базы, так как файлов на диске нет
+        await db.collection('tasks').deleteOne({ _id: ObjectId.createFromHexString(req.params.id) });
+        await clearCache(LOGIN_PAGE_CACHE_KEY);
         res.sendStatus(200);
     });
 
