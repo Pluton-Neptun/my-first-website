@@ -53,15 +53,18 @@ export default (db) => {
                     .msg-source { font-size:0.8em; color:#d4af37; margin-bottom:5px; font-weight:bold; }
                     hr { border:0; border-top:1px solid #555; margin:20px 0; }
                     
-                    /* ФОРМА (Подняли наверх) */
-                    .create-plan-box { background: rgba(156, 39, 176, 0.2); padding: 15px; border-radius: 8px; border: 1px solid #9c27b0; margin-bottom: 30px; margin-top: 10px; }
+                    /* ФОРМА (Теперь внутри таба) */
+                    .create-plan-box { background: rgba(156, 39, 176, 0.2); padding: 15px; border-radius: 8px; border: 1px solid #9c27b0; margin-bottom: 10px; }
                     
                     /* ТАБЫ */
-                    .tabs { display:flex; justify-content:center; gap:20px; margin-bottom:15px; border-bottom:1px solid #555; padding-bottom:10px; }
-                    .tab-link { color:#aaa; cursor:pointer; font-size:1.1em; }
-                    .tab-link.active { color:white; font-weight:bold; border-bottom:2px solid white; }
+                    .tabs { display:flex; justify-content:center; gap:20px; margin-bottom:15px; border-bottom:1px solid #555; padding-bottom:10px; flex-wrap:wrap;}
+                    .tab-link { color:#aaa; cursor:pointer; font-size:1.1em; padding: 5px 10px; border-radius: 5px; transition: 0.3s;}
+                    .tab-link:hover { background: rgba(255,255,255,0.1); }
+                    .tab-link.active { color:white; font-weight:bold; border-bottom:2px solid white; background: rgba(255,255,255,0.1); }
                     .tab-content { display:none; }
-                    .tab-content.active { display:block; }
+                    .tab-content.active { display:block; animation: fadeIn 0.5s; }
+                    
+                    @keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
                     
                     .checkbox-group label { display: inline-block; margin-right: 15px; cursor: pointer; }
                 </style></head><body>
@@ -74,25 +77,12 @@ export default (db) => {
                             <a href="/evening" class="nav-btn btn-evening">🌙 Доска (Смотреть)</a>
                         </div>
                         
-                        <div class="create-plan-box">
-                            <h3 style="color:#d4af37; margin-top:0;">📝 Опубликовать на "После 19:00"</h3>
-                            <form action="/evening/add" method="POST">
-                                <input type="hidden" name="_csrf" value="${res.locals.csrfToken}">
-                                <div style="display:flex; gap:10px;">
-                                    <input type="text" name="time" placeholder="Время (20:00)" required style="width:30%;">
-                                    <input type="text" name="contact" value="${user.phone||''}" placeholder="Ваш контакт" required style="width:70%;">
-                                </div>
-                                <textarea name="text" placeholder="Заголовок: Иду в кино... / Кальян / Прогулка..." required style="height:60px;"></textarea>
-                                <button type="submit" style="background:#9c27b0;">Опубликовать на Доску</button>
-                            </form>
-                        </div>
-                        
                         <hr>
 
-                        <h3>📬 Входящие сообщения</h3>
                         <div class="tabs">
-                            <span class="tab-link active" onclick="showTab('tab-all')">Общие</span>
-                            <span class="tab-link" onclick="showTab('tab-evening')" style="color:#d4af37;">Ответы "После 19:00"</span>
+                            <span class="tab-link active" onclick="showTab('tab-all')">📬 Входящие</span>
+                            <span class="tab-link" onclick="showTab('tab-evening')" style="color:#d4af37;">💬 Ответы</span>
+                            <span class="tab-link" onclick="showTab('tab-publish')" style="color:#e056fd;">📝 Опубликовать</span>
                         </div>
 
                         <div id="tab-all" class="tab-content active" style="max-height:400px; overflow-y:auto;">
@@ -102,6 +92,22 @@ export default (db) => {
                         <div id="tab-evening" class="tab-content" style="max-height:400px; overflow-y:auto;">
                             <h4 style="color:#ccc; text-align:center;">Вам ответили на планы:</h4>
                             ${eveningMessages.length > 0 ? eveningMessages.map(renderMsg).join('') : '<p style="text-align:center;color:#777">Пока ответов нет.</p>'}
+                        </div>
+
+                        <div id="tab-publish" class="tab-content">
+                             <div class="create-plan-box">
+                                <h3 style="color:#d4af37; margin-top:0;">Добавить на Доску "После 19:00"</h3>
+                                <form action="/evening/add" method="POST">
+                                    <input type="hidden" name="_csrf" value="${res.locals.csrfToken}">
+                                    <div style="display:flex; gap:10px;">
+                                        <input type="text" name="time" placeholder="Время (20:00)" required style="width:30%;">
+                                        <input type="text" name="contact" value="${user.phone||''}" placeholder="Ваш контакт" required style="width:70%;">
+                                    </div>
+                                    <textarea name="text" placeholder="Заголовок: Иду в кино... / Кальян / Прогулка..." required style="height:60px;"></textarea>
+                                    <button type="submit" style="background:#9c27b0;">Опубликовать на Доску</button>
+                                </form>
+                            </div>
+                            <p style="text-align:center; color:#aaa; font-size:0.9em;">Ваше объявление появится на <a href="/evening" style="color:#e056fd">общей доске</a>.</p>
                         </div>
 
                         <hr>
