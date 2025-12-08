@@ -1,5 +1,4 @@
-
- {
+{
   "name": "site",
   "version": "1.0.0",
   "description": "",
@@ -15,7 +14,7 @@
   "engines": {
     "node": ">=18.0.0"
   },
-  "dependencies": { 
+  "dependencies": {
     "connect-mongo": "^5.1.0",
     "cors": "^2.8.5",
     "csrf-sync": "^4.2.1",
@@ -24,7 +23,8 @@
     "express-session": "^1.18.0",
     "mongodb": "^6.5.0",
     "multer": "^1.4.5-lts.1",
-    "redis": "^4.6.13"
+    "redis": "^4.6.13",
+    "sitemap": "^9.0.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.0"
