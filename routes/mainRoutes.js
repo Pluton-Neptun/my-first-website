@@ -6,11 +6,11 @@ function isImage(filename) { return filename && filename.match(/\.(jpg|jpeg|png|
 export default (db) => {
     const router = express.Router();
 
-    // 1. ОТПРАВКА СООБЩЕНИЯ (Оставляем без изменений)
+    // 1. ОТПРАВКА СООБЩЕНИЯ
     router.post('/send-message', async (req, res) => {
         try {
             const { toUserId, imageId, messageText, contactInfo, source } = req.body;
-            await db.collection('messages').insertOne({ 
+            await db.collection('messages').insertOne({
                 toUserId: toUserId,
                 fromContact: contactInfo || "Гость",
                 imageId: imageId || null, 
@@ -20,15 +20,14 @@ export default (db) => {
                 createdAt: new Date(),
                 isRead: false
             });
-            res.json({ status: 'ok' }); 
+            res.json({ status: 'ok' });
         } catch (error) { 
             console.error(error); 
             res.status(500).json({ error: 'Ошибка отправки' }); 
         }
     });
 
-    // 2. ГЛАВНАЯ СТРАНИЦА (Она же "/" или "/login" в вашей версии)
-    // Я поменял путь на "/" (корневой), так как это главная страница сайта
+    // 2. ГЛАВНАЯ СТРАНИЦА (ПОЛНАЯ ВЕРСИЯ)
     router.get("/", async (req, res) => { 
         try {
             res.set('Cache-Control', 'public, max-age=0, must-revalidate'); 
@@ -55,11 +54,11 @@ export default (db) => {
 
             let commentsHtml = pageData.comments.map(c => `<div class="comment"><b>${c.authorName}:</b> ${c.text}</div>`).join('');
             
-            const renderGalleryItem = (t, isReadyDoc = false) => { 
+            const renderGalleryItem = (t, isReadyDoc = false) => {
                 let src = '';
                 let isImg = isImage(t.fileName);
 
-                if (t.imageBase64) { 
+                if (t.imageBase64) {
                     src = `data:${t.mimetype || 'image/jpeg'};base64,${t.imageBase64}`;
                     isImg = true; 
                 } else {
@@ -72,11 +71,11 @@ export default (db) => {
 
                 const borderClass = isReadyDoc ? 'ready-border' : 'work-border';
                 
-                if (isReadyDoc) { 
+                if (isReadyDoc) {
                     return `<a href="${src}" target="_blank" class="gallery-item ${borderClass}">${content}</a>`;
                 }
 
-                let statusHtml = ''; 
+                let statusHtml = '';
                 if (t.amount && t.amount.trim() !== '') statusHtml = `<div class="status-label status-amount">${t.amount}</div>`;
                 else if (t.status === 'free') statusHtml = `<div class="status-label status-free">Свободна сегодня</div>`;
                 else if (t.status === 'company') statusHtml = `<div class="status-label status-company">Ждем компанию</div>`;
@@ -90,7 +89,7 @@ export default (db) => {
                         ${statusHtml}
                     </div>
                 `;
-            }; 
+            };
 
             let tasksHtml = `<div class="gallery-grid">` + pageData.tasks.map(t => renderGalleryItem(t, false)).join('') + `</div>`;
             let completedHtml = `<div class="gallery-grid">` + pageData.readyDocs.map(d => renderGalleryItem(d, true)).join('') + `</div>`;
@@ -176,7 +175,7 @@ export default (db) => {
                         .evening-link { display: block; margin-top: 40px; font-size: 1.5em; color: #d4af37; text-decoration: none; border: 2px solid #d4af37; padding: 10px 20px; border-radius: 10px; transition: 0.3s; background: rgba(0,0,0,0.5); }
                         .evening-link:hover { background: #d4af37; color: black; }
 
-                        /* --- 2. МОБИЛЬНАЯ АДАПТАЦИЯ (МЕДИА ЗАПРОСЫ) --- */
+                        /* --- 2. МОБИЛЬНАЯ АДАПТАЦИЯ (ГЛАВНАЯ МАГИЯ) --- */
                         @media (max-width: 768px) {
                             body {
                                 background-attachment: scroll; /* Фон не дергается */
