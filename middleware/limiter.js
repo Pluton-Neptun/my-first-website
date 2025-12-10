@@ -22,4 +22,4 @@ const registerLimiter = rateLimit({
     }),
 });
 
-export default registerLimiter;
+export default registerLimiter; 
