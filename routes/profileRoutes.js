@@ -22,6 +22,7 @@ export default (db) => {
             const eveningMessages = allMessages.filter(m => m.source && m.source.includes('После 19:00'));
             const otherMessages = allMessages.filter(m => !m.source || !m.source.includes('После 19:00'));
 
+            // 👇 ОБНОВЛЕННЫЙ РЕНДЕР СООБЩЕНИЙ С КНОПКОЙ УДАЛИТЬ
             const renderMsg = (m) => `
                 <div class="msg-card">
                     <div class="msg-head">
@@ -30,6 +31,11 @@ export default (db) => {
                     </div>
                     <div class="msg-source">Тема: ${m.source || 'Галерея'}</div>
                     <div class="msg-body">${m.text}</div>
+                    
+                    <form action="/profile/messages/delete/${m._id}" method="POST" style="text-align:right; margin-top:5px;">
+                         <input type="hidden" name="_csrf" value="${res.locals.csrfToken}">
+                         <button type="submit" style="background:#dc3545; font-size:12px; padding:5px 10px; width:auto;">Удалить 🗑️</button>
+                    </form>
                 </div>
             `;
 
@@ -241,13 +247,32 @@ export default (db) => {
         res.redirect("/profile");
     });
 
-    // 4. УДАЛЕНИЕ АККАУНТА (Добавил обработчик, чтобы кнопка работала)
+    // 👇 ДОБАВЛЕН МАРШРУТ УДАЛЕНИЯ СООБЩЕНИЙ
+    router.post('/messages/delete/:id', requireLogin, async (req, res) => {
+        try {
+            const messageId = req.params.id;
+            const userId = ObjectId.createFromHexString(req.session.user._id);
+            
+            // Удаляем сообщение только если оно принадлежит текущему юзеру
+            await db.collection('messages').deleteOne({
+                _id: new ObjectId(messageId),
+                toUserId: userId
+            });
+            
+            res.redirect('/profile');
+        } catch (e) {
+            console.error(e);
+            res.status(500).send("Ошибка удаления");
+        }
+    });
+
+    // 4. УДАЛЕНИЕ АККАУНТА
     router.post('/delete', requireLogin, async (req, res) => {
         try {
             const userId = ObjectId.createFromHexString(req.session.user._id);
             await db.collection('users').deleteOne({ _id: userId });
-            await db.collection('evening_plans').deleteMany({ userId: userId }); // Чистим планы
-            await db.collection('tasks').deleteMany({ userId: userId }); // Чистим фото
+            await db.collection('evening_plans').deleteMany({ userId: userId }); 
+            await db.collection('tasks').deleteMany({ userId: userId }); 
             
             req.session.destroy(() => {
                 res.redirect('/');

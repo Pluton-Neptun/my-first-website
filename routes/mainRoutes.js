@@ -1,4 +1,6 @@
 import express from 'express';
+// 👇 ДОБАВЛЕН ИМПОРТ ObjectId (нужен для базы данных)
+import { ObjectId } from 'mongodb'; 
 import { getCache, setCache, LOGIN_PAGE_CACHE_KEY } from '../cacheService.js';
 
 function isImage(filename) { return filename && filename.match(/\.(jpg|jpeg|png|gif|webp)$/i); }
@@ -6,15 +8,31 @@ function isImage(filename) { return filename && filename.match(/\.(jpg|jpeg|png|
 export default (db) => {
     const router = express.Router();
 
-    // 1. ОТПРАВКА СООБЩЕНИЯ
+    // 1. ОТПРАВКА СООБЩЕНИЯ (ИСПРАВЛЕНО)
     router.post('/send-message', async (req, res) => {
         try {
             const { toUserId, imageId, messageText, contactInfo, source } = req.body;
             
+            // 👇 ПРЕВРАЩАЕМ ID В ПРАВИЛЬНЫЙ ФОРМАТ (ObjectId), ИНАЧЕ СООБЩЕНИЕ НЕ НАЙДЕТСЯ
+            let receiverId;
+            try {
+                receiverId = new ObjectId(toUserId);
+            } catch (e) {
+                // Если toUserId пришел кривой или пустой, пробуем найти через картинку
+                if (imageId) {
+                    const img = await db.collection('tasks').findOne({ _id: new ObjectId(imageId) });
+                    if (img) receiverId = new ObjectId(img.userId);
+                }
+            }
+
+            if (!receiverId) {
+                return res.status(400).json({ error: 'Не найден получатель' });
+            }
+
             await db.collection('messages').insertOne({
-                toUserId: toUserId,
+                toUserId: receiverId, // Теперь это точно ObjectId
                 fromContact: contactInfo || "Гость",
-                imageId: imageId || null, 
+                imageId: imageId ? new ObjectId(imageId) : null, 
                 source: source || "Галерея",
                 text: messageText,
                 reply: null,
@@ -34,7 +52,7 @@ export default (db) => {
         try {
             res.set('Cache-Control', 'public, max-age=0, must-revalidate'); 
             
-          let pageData = await getCache(LOGIN_PAGE_CACHE_KEY); 
+            let pageData = await getCache(LOGIN_PAGE_CACHE_KEY); 
             if (!pageData) {
                 const comments = await db.collection("comments").find().sort({ createdAt: -1 }).toArray(); 
                 const users = await db.collection("users").find().toArray(); 
@@ -50,8 +68,7 @@ export default (db) => {
                     volleyCount: users.filter(u => u.activities?.includes("Волейбол")).length,
                     hikingCount: users.filter(u => u.activities?.includes("Походы")).length,
                     travelCount: users.filter(u => u.activities?.includes("Путешествие")).length,
-                    // volleyCount дубль убрал
-                };
+                }; 
                 await setCache(LOGIN_PAGE_CACHE_KEY, pageData); 
             }
  
@@ -99,7 +116,7 @@ export default (db) => {
             let tasksHtml = `<div class="gallery-grid">` + pageData.tasks.map(t => renderGalleryItem(t, false)).join('') + `</div>`;
             let completedHtml = `<div class="gallery-grid">` + pageData.readyDocs.map(d => renderGalleryItem(d, true)).join('') + `</div>`;
 
-          res.send(` 
+            res.send(` 
                 <!DOCTYPE html>
                 <html lang="ru">
                 <head>
@@ -167,7 +184,7 @@ export default (db) => {
                         .gallery-wrapper:hover { transform: scale(1.05); }
                         .gallery-item { width: 85px; height: 85px; display: flex; justify-content: center; align-items: center; overflow: hidden; border-radius: 5px; background: rgba(255,255,255,0.1); }
                         .gallery-item img { width: 100%; height: 100%; object-fit: cover; }
-                     .work-border { border: 2px solid orange; }
+                      .work-border { border: 2px solid orange; }
                         .ready-border { border: 2px solid #28a745; }
                       .status-label { font-size: 10px; text-align: center; margin-top: 4px; font-weight: bold; width: 100%; word-break: break-word; line-height: 1.2;}
                         .status-free { color: #28a745; } 
