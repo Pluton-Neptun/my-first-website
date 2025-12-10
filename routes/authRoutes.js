@@ -1,6 +1,8 @@
 
 import express from 'express';
 import { clearCache, LOGIN_PAGE_CACHE_KEY } from '../cacheService.js';
+// 👇 ДОБАВИЛ ИМПОРТ ЛИМИТЕРА
+import registerLimiter from '../middleware/limiter.js'; 
 
 export default (db) => {
     const router = express.Router();
@@ -58,7 +60,8 @@ export default (db) => {
     });
 
     // Обрабатываем данные регистрации
-    router.post("/register", async (req, res) => {
+    // 👇 ДОБАВИЛ registerLimiter ВТОРЫМ АРГУМЕНТОМ
+    router.post("/register", registerLimiter, async (req, res) => {
         try {
             // Проверка: занят ли email?
             const existingUser = await db.collection("users").findOne({ email: req.body.email });
