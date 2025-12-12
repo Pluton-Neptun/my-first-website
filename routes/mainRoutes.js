@@ -2,6 +2,7 @@ import express from 'express';
 // 👇 ДОБАВЛЕН ИМПОРТ ObjectId (нужен для базы данных)
 import { ObjectId } from 'mongodb'; 
 import { getCache, setCache, LOGIN_PAGE_CACHE_KEY } from '../cacheService.js';
+import { checkLimitsAndGetCounts } from '../services/activityService.js';
 
 function isImage(filename) { return filename && filename.match(/\.(jpg|jpeg|png|gif|webp)$/i); }
 
