@@ -1,23 +1,27 @@
 import express from 'express';
 import path from 'path';
 import { ObjectId } from "mongodb";
-import multer from 'multer'; // Импортируем Multer здесь для настройки памяти
+import multer from 'multer'; 
 import { clearCache, LOGIN_PAGE_CACHE_KEY } from '../cacheService.js';
 
 const __dirname = path.resolve();
 const requireLogin = (req, res, next) => { if (req.session.user) next(); else return res.redirect("/login"); };
 
-// НАСТРОЙКА ЗАГРУЗКИ В ПАМЯТЬ (Для Render)
+// 1. НАСТРОЙКА ЗАГРУЗКИ В ПАМЯТЬ (ВАЖНО ДЛЯ RENDER)
+// Мы не сохраняем файлы на диск, мы держим их в RAM, чтобы сразу положить в Базу
 const storage = multer.memoryStorage();
-const uploadMemory = multer({ 
+const upload = multer({ 
     storage: storage,
-    limits: { fileSize: 10 * 1024 * 1024 } // Ограничение 10MB (чтобы база не лопнула)
+    limits: { fileSize: 10 * 1024 * 1024 } // Лимит 10MB (чтобы база не лопнула)
 });
 
-export default (db, uploadDisk) => { // uploadDisk нам больше не нужен, используем uploadMemory
+// Убрал uploadDisk из аргументов, он больше не нужен
+export default (db) => { 
     const router = express.Router();
 
-    // СТРАНИЦА КАБИНЕТА
+    // =========================================================
+    // 1. СТРАНИЦА КАБИНЕТА (HTML)
+    // =========================================================
     router.get('/', requireLogin, async (req, res) => { 
         res.set('Cache-Control', 'public, max-age=0, must-revalidate'); 
         res.send(`
@@ -57,28 +61,14 @@ export default (db, uploadDisk) => { // uploadDisk нам больше не ну
                   button:hover { opacity: 0.9; }
                   a.btn-back { display: block; background: #6c757d; color: white; text-align: center; padding: 12px; margin-top: 20px; text-decoration: none; border-radius: 5px; }
 
-                  /* --- 2. МОБИЛЬНАЯ АДАПТАЦИЯ --- */
+                  /* --- МОБИЛЬНАЯ АДАПТАЦИЯ --- */
                   @media (max-width: 768px) {
-                      body { 
-                          background-attachment: scroll; 
-                          padding: 10px;
-                      }
-                      .container { 
-                          padding: 15px; 
-                          width: 100%;
-                          box-sizing: border-box;
-                          margin-top: 10px;
-                          margin-bottom: 10px;
-                      }
-                      
-                      /* Табы на телефоне делаем во всю ширину, чтобы удобно нажимать */
+                      body { background-attachment: scroll; padding: 10px; }
+                      .container { padding: 15px; width: 100%; box-sizing: border-box; margin-top: 10px; margin-bottom: 10px; }
                       .tabs { flex-direction: column; gap: 0; }
                       .tab-button { width: 100%; text-align: left; border-radius: 5px; margin-bottom: 5px; border-bottom: none; border-left: 4px solid transparent; }
                       .tab-button.active { border-bottom: none; border-left: 4px solid #ff9800; }
-
-                      h1 { font-size: 1.8em; }
-                      
-                      /* Увеличиваем поля ввода, чтобы не было зума на iPhone */
+                      h1 { font-size: 1.8em; } 
                       input, textarea, select { font-size: 16px; }
                       button { width: 100%; padding: 15px; }
                   }
@@ -127,8 +117,7 @@ export default (db, uploadDisk) => { // uploadDisk нам больше не ну
                     function openTab(id) {
                         document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
                         document.querySelectorAll('.tab-button').forEach(b => b.classList.remove('active'));
-                        document.getElementById(id).classList.add('active');
-                        // Простая логика переключения кнопок
+                     document.getElementById(id).classList.add('active');
                         const btns = document.querySelectorAll('.tab-button');
                         if(id === 'tab-tasks') btns[0].classList.add('active');
                         else btns[1].classList.add('active');
@@ -212,57 +201,67 @@ export default (db, uploadDisk) => { // uploadDisk нам больше не ну
         `);
     });
 
-  // ИСПРАВЛЕННЫЙ РОУТ ЗАГРУЗКИ (В БАЗУ ДАННЫХ)
-  router.post('/upload', requireLogin, uploadMemory.single('document'), async (req, res) => {
+    // =========================================================
+    // 2. ОБРАБОТКА ЗАГРУЗКИ (Base64)
+    // =========================================================
+    router.post('/upload', requireLogin, upload.single('document'), async (req, res) => {
         try {
             if (!req.file) return res.status(400).json({ error: 'Нет файла' });
 
-            // Конвертируем картинку в строку Base64
+            // 1. Превращаем файл из буфера (памяти) в строку Base64
             const imgBase64 = req.file.buffer.toString('base64');
 
+            // 2. Сохраняем в базу данных
             await db.collection('tasks').insertOne({
                 originalName: req.file.originalname, 
-                fileName: req.file.originalname, // Имя оставляем для совместимости
-                // path: ... путь больше не нужен
-                imageBase64: imgBase64, // <-- ВОТ САМО ФОТО
-                mimetype: req.file.mimetype, // Тип файла (jpg/png)
+                fileName: req.file.originalname, 
+                // Вместо пути к файлу сохраняем САМ файл в тексте
+                imageBase64: imgBase64, 
+                mimetype: req.file.mimetype, // (например image/jpeg)
+                
                 uploadedBy: req.session.user.name, 
                 userId: ObjectId.createFromHexString(req.session.user._id), 
                 status: req.body.status || 'busy', 
                 amount: req.body.amount || '',
                 createdAt: new Date()
             });
+
+            // 3. Чистим кэш главной, чтобы фото появилось сразу
             await clearCache(LOGIN_PAGE_CACHE_KEY); 
+            
             res.json({ status: 'ok' });
         } catch (error) { 
             console.error(error);
-            res.status(500).json({ error: 'Err' }); 
+            res.status(500).json({ error: 'Ошибка загрузки' }); 
         }
     });
 
+    // Получить список загрузок (для админки)
     router.get('/tasks', requireLogin, async (req, res) => { 
-        // При загрузке списка не тянем саму картинку (она тяжелая), только инфо
-        // Используем projection чтобы исключить imageBase64 из списка (экономия трафика)
+        // Мы НЕ загружаем саму картинку (imageBase64) в этот список, чтобы он работал быстро
+        // Картинка загружается только на ГЛАВНОЙ странице
         const tasks = await db.collection('tasks')
             .find({ userId: ObjectId.createFromHexString(req.session.user._id) })
-            .project({ imageBase64: 0 }) // Не загружаем картинку в админке, только имя
+            .project({ imageBase64: 0 }) // <--- Исключаем тяжелое поле
             .sort({ createdAt: -1 })
             .toArray(); 
         res.json(tasks);
     });
 
-    router.delete('/tasks/:id', requireLogin, async (req, res) => {
-        // Удаляем только из базы, так как файлов на диске нет
+    // Удаление
+    router.delete('/tasks/:id', requireLogin, async (req, res) => { 
         await db.collection('tasks').deleteOne({ _id: ObjectId.createFromHexString(req.params.id) });
         await clearCache(LOGIN_PAGE_CACHE_KEY);
         res.sendStatus(200);
     });
 
+    // Сообщения
    router.get('/messages', requireLogin, async (req, res) => {
         const msgs = await db.collection('messages').find({ toUserId: ObjectId.createFromHexString(req.session.user._id) }).sort({ createdAt: -1 }).toArray();
         res.json(msgs);
     });
 
+    // Ответ на сообщение
     router.post('/reply', requireLogin, async (req, res) => {
         await db.collection('messages').updateOne({ _id: ObjectId.createFromHexString(req.body.msgId) }, { $set: { reply: req.body.text, isRead: true } });
         res.json({ status: 'ok' });
