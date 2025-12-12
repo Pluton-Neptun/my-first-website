@@ -1,7 +1,7 @@
 import express from 'express';
 import { ObjectId } from "mongodb";
 import { clearCache, LOGIN_PAGE_CACHE_KEY } from '../cacheService.js';
-
+import { removeUserActivity } from '../services/activityService.js';
 const requireLogin = (req, res, next) => {
     if (req.session.user) next();
     else return res.redirect("/login"); 
@@ -280,6 +280,18 @@ export default (db) => {
         } catch (error) {
             console.error(error);
             res.status(500).send("Ошибка при удалении");
+        }
+    });
+
+// 5. УДАЛЕНИЕ АКТИВНОСТИ (Связь с новым сервисом)
+    router.post('/activities/delete', requireLogin, async (req, res) => {
+        try {
+            const { activityName } = req.body; // Получаем название, например "Волейбол"
+            await removeUserActivity(db, req.session.user._id, activityName);
+            res.redirect('/profile'); // Или redirect('/activities'), смотря где была нажата кнопка
+        } catch (e) {
+            console.error(e);
+            res.status(500).send("Ошибка при удалении активности");
         }
     });
 
