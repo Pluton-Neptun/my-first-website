@@ -1,7 +1,9 @@
+
+import { removeUserActivity } from '../services/activityService.js';
 import express from 'express';
 import { ObjectId } from "mongodb";
 import { clearCache, LOGIN_PAGE_CACHE_KEY } from '../cacheService.js';
-import { removeUserActivity } from '../services/activityService.js';
+
 const requireLogin = (req, res, next) => {
     if (req.session.user) next();
     else return res.redirect("/login"); 
