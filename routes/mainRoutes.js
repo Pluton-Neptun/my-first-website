@@ -54,21 +54,27 @@ export default (db) => {
             
             let pageData = await getCache(LOGIN_PAGE_CACHE_KEY); 
             if (!pageData) {
+                // 1. Сначала запускаем проверку лимитов и авто-удаление
+                // Функция вернет объект типа: { "Шахматы": 2, "Футбол": 5 }
+                const activityCounts = await checkLimitsAndGetCounts(db);
+
+                // 2. Загружаем остальные данные
                 const comments = await db.collection("comments").find().sort({ createdAt: -1 }).toArray(); 
-                const users = await db.collection("users").find().toArray(); 
-                const tasks = await db.collection('tasks').find().sort({ createdAt: -1 }).toArray(); 
+               const tasks = await db.collection('tasks').find().sort({ createdAt: -1 }).toArray(); 
                 const readyDocs = await db.collection('ready_documents').find().sort({ completedAt: -1 }).toArray(); 
                 
+                // 3. Собираем данные для страницы, подставляя цифры из нашего сервиса
                 pageData = { 
                     comments, tasks, readyDocs,
-                    chessCount: users.filter(u => u.activities?.includes("Шахматы")).length,
-                    footballCount: users.filter(u => u.activities?.includes("Футбол")).length,
-                    danceCount: users.filter(u => u.activities?.includes("Танцы")).length,
-                    hockeyCount: users.filter(u => u.activities?.includes("Хоккей")).length,
-                    volleyCount: users.filter(u => u.activities?.includes("Волейбол")).length,
-                    hikingCount: users.filter(u => u.activities?.includes("Походы")).length,
-                    travelCount: users.filter(u => u.activities?.includes("Путешествие")).length,
+                    chessCount: activityCounts["Шахматы"] || 0,
+                    footballCount: activityCounts["Футбол"] || 0,
+                    danceCount: activityCounts["Танцы"] || 0,
+                    hockeyCount: activityCounts["Хоккей"] || 0,
+                    volleyCount: activityCounts["Волейбол"] || 0,
+                    hikingCount: activityCounts["Походы"] || 0,
+                    travelCount: activityCounts["Путешествие"] || 0,
                 }; 
+                
                 await setCache(LOGIN_PAGE_CACHE_KEY, pageData); 
             }
  

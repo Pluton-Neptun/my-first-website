@@ -1,6 +1,8 @@
 import express from 'express';
 import { ObjectId } from "mongodb";
 import { clearCache, LOGIN_PAGE_CACHE_KEY } from '../cacheService.js';
+// 👇 1. ПОДКЛЮЧАЕМ НАШ НОВЫЙ СЕРВИС
+import { addUserActivity, removeUserActivity } from '../services/activityService.js';
 
 const requireLogin = (req, res, next) => {
     if (req.session.user) next();
@@ -21,18 +23,47 @@ export default (db) => {
             const currentUser = await db.collection("users").findOne({ _id: ObjectId.createFromHexString(req.session.user._id) });
             const userActivities = currentUser ? (currentUser.activities || []) : [];
             
-            // Считаем участников для ВСЕХ категорий
+            // 👇 Вспомогательная функция: проверяет, есть ли активность у юзера (и как строка, и как объект)
+            const hasActivity = (list, name) => {
+                return list.some(a => a === name || a.name === name);
+            };
+
+            // 👇 Вспомогательная функция: считает количество (учитывая и строки, и объекты)
+            const countUsers = (name) => {
+                return users.filter(u => u.activities && hasActivity(u.activities, name)).length;
+            };
+
+            // Считаем участников (обновленная логика)
             const counts = {
-                chess: users.filter(u => u.activities?.includes("Шахматы")).length,
-                football: users.filter(u => u.activities?.includes("Футбол")).length,
-                dance: users.filter(u => u.activities?.includes("Танцы")).length,
-                hockey: users.filter(u => u.activities?.includes("Хоккей")).length,
-                volley: users.filter(u => u.activities?.includes("Волейбол")).length,
-                hiking: users.filter(u => u.activities?.includes("Походы")).length,
-                travel: users.filter(u => u.activities?.includes("Путешествие")).length
+                chess: countUsers("Шахматы"),
+                football: countUsers("Футбол"),
+                dance: countUsers("Танцы"),
+                hockey: countUsers("Хоккей"),
+                volley: countUsers("Волейбол"),
+                hiking: countUsers("Походы"),
+                travel: countUsers("Путешествие")
             };
             
-            const renderCard = (name, count, label) => `
+            const renderCard = (name, count, label) => {
+                const isJoined = hasActivity(userActivities, name);
+                
+                // 👇 ЛОГИКА ОТОБРАЖЕНИЯ:
+                // Если записан -> кнопка "Отписаться"
+                // Если НЕТ -> Поле для лимита + кнопка "Записаться"
+                
+                let actionHtml = '';
+                if (isJoined) {
+                    actionHtml = `<button type="submit" name="action" value="leave" class="btn btn-leave">Отписаться</button>`;
+                } else {
+                    actionHtml = `
+                        <div style="margin-bottom: 5px; font-size: 0.9em; color: #555;">
+                            <label>Хочу до: <input type="number" name="limit" placeholder="∞" style="width: 50px; padding: 3px; border: 1px solid #ccc; border-radius: 3px;"> чел.</label>
+                        </div>
+                        <button type="submit" name="action" value="join" class="btn btn-join">Записаться</button>
+                    `;
+                }
+
+                return `
                 <div class="activity-card">
                     <div class="activity-header">
                         <a href="/activities/${name}" style="color:#333; text-decoration:none;">${label || name}</a>
@@ -41,11 +72,10 @@ export default (db) => {
                     <form action="/activities/update" method="POST" style="display:inline;">
                         <input type="hidden" name="_csrf" value="${res.locals.csrfToken}">
                         <input type="hidden" name="activity" value="${name}">
-                        ${userActivities.includes(name) 
-                            ? `<button type="submit" name="action" value="leave" class="btn btn-leave">Отписаться</button>` 
-                            : `<button type="submit" name="action" value="join" class="btn btn-join">Записаться</button>`}
+                        ${actionHtml}
                     </form>
                 </div>`; 
+            };
 
             res.send(` 
                 <!DOCTYPE html><html lang="ru"><head><meta charset="UTF-8"><title>Активности</title>
@@ -58,6 +88,7 @@ export default (db) => {
                     .btn-join { background-color: #28a745; } .btn-leave { background-color: #dc3545; }
                     a.back-link { color: #007BFF; text-decoration: none; font-weight: bold; display:block; text-align:center; margin-top:20px; }
                     h3 { margin-top: 30px; border-bottom: 2px solid #ccc; padding-bottom: 5px; }
+                    input[type=number]::-webkit-inner-spin-button { opacity: 1; }
                 </style></head><body>
                 <div class="tab-container">
                     <h2>Доступные активности</h2>
@@ -82,30 +113,58 @@ export default (db) => {
     });
 
     // ------------------------------------------
-    // 2. ОБНОВЛЕНИЕ ПОДПИСКИ (Записаться/Отписаться)
+    // 2. ОБНОВЛЕНИЕ ПОДПИСКИ (Записаться/Отписаться) - ТЕПЕРЬ ЧЕРЕЗ СЕРВИС
     // ------------------------------------------
     router.post("/update", requireLogin, async (req, res) => {
-        const { activity, action } = req.body;
-        const uid = ObjectId.createFromHexString(req.session.user._id);
-        
-        if(action==="join") await db.collection("users").updateOne({_id:uid},{$addToSet:{activities:activity}});
-        else await db.collection("users").updateOne({_id:uid},{$pull:{activities:activity}});
-        
-        await clearCache(LOGIN_PAGE_CACHE_KEY); 
-        res.redirect("/activities");
+        try {
+            const { activity, action, limit } = req.body; // Получаем limit из формы
+            const uid = req.session.user._id;
+            
+            if(action === "join") {
+                // 👇 Используем функцию добавления из сервиса
+                await addUserActivity(db, uid, activity, limit);
+            } else {
+                // 👇 Используем функцию удаления из сервиса
+                await removeUserActivity(db, uid, activity);
+            }
+            
+            res.redirect("/activities");
+        } catch (e) {
+            console.error(e);
+            res.status(500).send("Ошибка обновления активности");
+        }
     });
 
     // ------------------------------------------
-    // 3. ПРОСМОТР УЧАСТНИКОВ + ОТПРАВКА СООБЩЕНИЙ
+    // 3. ПРОСМОТР УЧАСТНИКОВ
     // ------------------------------------------
     router.get('/:activityName', async (req, res) => {
         try {
             const activityName = req.params.activityName;
-            const participants = await db.collection('users').find({ activities: activityName }).toArray();
             
-            let html = participants.map(p => `
+            // 👇 ОБНОВЛЕННЫЙ ПОИСК: Ищем и строки "Футбол", и объекты { name: "Футбол" }
+            const participants = await db.collection('users').find({
+                $or: [
+                    { activities: activityName },           // Старый формат (строка)
+                    { "activities.name": activityName }     // Новый формат (объект)
+                ]
+            }).toArray();
+            
+            let html = participants.map(p => {
+                // Пытаемся найти лимит для отображения в карточке (опционально)
+                let limitInfo = "";
+                if (Array.isArray(p.activities)) {
+                    const actObj = p.activities.find(a => a.name === activityName);
+                    if (actObj && actObj.limit) {
+                        limitInfo = `<span style="color:#d4af37; font-weight:bold; font-size:0.9em;">(Ищет до ${actObj.limit} чел.)</span>`;
+                    }
+                }
+
+                return `
                 <div class="card">
-                    <div style="font-weight:bold; font-size:1.2em; margin-bottom:5px;">${p.name}</div>
+                    <div style="font-weight:bold; font-size:1.2em; margin-bottom:5px;">
+                        ${p.name} ${limitInfo}
+                    </div>
                     <div style="color:#666;">📞 ${p.phone || 'Нет'} | 🌍 ${p.city || ''}</div>
                     <div style="margin-bottom:10px;">📅 ${(p.availability?.days||[]).join(', ')} | ⏰ ${p.availability?.time || ''}</div>
                     
@@ -114,7 +173,8 @@ export default (db) => {
                         <textarea name="text" placeholder="Сообщение..." required style="width:100%; height:50px; padding:5px;"></textarea>
                         <button type="submit" style="width:100%; padding:5px; background:#007BFF; color:white; border:none; cursor:pointer;">Написать ${p.name}</button>
                     </form>
-                </div>`).join('') || '<p>Пока никого нет.</p>';
+                </div>`;
+            }).join('') || '<p>Пока никого нет.</p>';
                 
             res.send(`
                 <!DOCTYPE html><html><head><meta charset="UTF-8"><title>${activityName}</title>
@@ -149,4 +209,4 @@ export default (db) => {
     });
 
     return router;
-}; 
+};
