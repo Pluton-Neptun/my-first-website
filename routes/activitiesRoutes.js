@@ -25,7 +25,7 @@ export default (db) => {
             
             // 👇 Вспомогательная функция: проверяет, есть ли активность у юзера (и как строка, и как объект)
             const hasActivity = (list, name) => {
-                return list.some(a => a === name || a.name === name);
+                return list.some(a => a === name || (a && a.name === name));
             };
 
             // 👇 Вспомогательная функция: считает количество (учитывая и строки, и объекты)
@@ -113,7 +113,7 @@ export default (db) => {
     });
 
     // ------------------------------------------
-    // 2. ОБНОВЛЕНИЕ ПОДПИСКИ (Записаться/Отписаться) - ТЕПЕРЬ ЧЕРЕЗ СЕРВИС
+    // 2. ОБНОВЛЕНИЕ ПОДПИСКИ (Записаться/Отписаться) - ЧЕРЕЗ СЕРВИС
     // ------------------------------------------
     router.post("/update", requireLogin, async (req, res) => {
         try {
@@ -136,25 +136,35 @@ export default (db) => {
     });
 
     // ------------------------------------------
-    // 3. ПРОСМОТР УЧАСТНИКОВ
+    // 3. ПРОСМОТР УЧАСТНИКОВ (ИСПРАВЛЕННАЯ БЕЗОПАСНАЯ ВЕРСИЯ)
     // ------------------------------------------
     router.get('/:activityName', async (req, res) => {
         try {
             const activityName = req.params.activityName;
             
-            // 👇 ОБНОВЛЕННЫЙ ПОИСК: Ищем и строки "Футбол", и объекты { name: "Футбол" }
+            // 🛡️ ЗАЩИТА ОТ БОТОВ: Игнорируем системные файлы
+            if (['favicon.ico', 'update', 'css', 'js', 'sitemap.xml'].includes(activityName)) {
+                return res.status(404).send('Not found');
+            }
+
+            // 🛡️ ЗАЩИТА ОТ ОШИБКИ CSRF (для ботов)
+            const safeCsrf = res.locals.csrfToken || '';
+
+            // 👇 ОБНОВЛЕННЫЙ ПОИСК (Твой код сохранен): Ищем и строки "Футбол", и объекты { name: "Футбол" }
             const participants = await db.collection('users').find({
                 $or: [
-                    { activities: activityName },           // Старый формат (строка)
-                    { "activities.name": activityName }     // Новый формат (объект)
+                    { activities: activityName },       // Старый формат (строка)
+                    { "activities.name": activityName } // Новый формат (объект)
                 ]
             }).toArray();
             
-            let html = participants.map(p => {
-                // Пытаемся найти лимит для отображения в карточке (опционально)
+            let html = participants.map(p => { 
                 let limitInfo = "";
+                
+                // 🛡️ ГЛАВНОЕ ИСПРАВЛЕНИЕ ЗДЕСЬ:
+                // Добавлена проверка (typeof a === 'object'), чтобы сервер не падал, если в базе старые данные или null
                 if (Array.isArray(p.activities)) {
-                    const actObj = p.activities.find(a => a.name === activityName);
+                    const actObj = p.activities.find(a => a && typeof a === 'object' && a.name === activityName);
                     if (actObj && actObj.limit) {
                         limitInfo = `<span style="color:#d4af37; font-weight:bold; font-size:0.9em;">(Ищет до ${actObj.limit} чел.)</span>`;
                     }
@@ -163,7 +173,7 @@ export default (db) => {
                 return `
                 <div class="card">
                     <div style="font-weight:bold; font-size:1.2em; margin-bottom:5px;">
-                        ${p.name} ${limitInfo}
+                        ${p.name || 'Пользователь'} ${limitInfo}
                     </div>
                     <div style="color:#666;">📞 ${p.phone || 'Нет'} | 🌍 ${p.city || ''}</div>
                     <div style="margin-bottom:10px;">📅 ${(p.availability?.days||[]).join(', ')} | ⏰ ${p.availability?.time || ''}</div>
@@ -171,7 +181,7 @@ export default (db) => {
                     <form onsubmit="sendActivityMessage(event, '${p._id}')" style="background:#f9f9f9; padding:10px; border-radius:5px;">
                         <input type="text" name="contact" placeholder="Ваш контакт" required style="width:100%; margin-bottom:5px; padding:5px;">
                         <textarea name="text" placeholder="Сообщение..." required style="width:100%; height:50px; padding:5px;"></textarea>
-                        <button type="submit" style="width:100%; padding:5px; background:#007BFF; color:white; border:none; cursor:pointer;">Написать ${p.name}</button>
+                        <button type="submit" style="width:100%; padding:5px; background:#007BFF; color:white; border:none; cursor:pointer;">Написать ${p.name || ''}</button>
                     </form>
                 </div>`;
             }).join('') || '<p>Пока никого нет.</p>';
@@ -195,7 +205,7 @@ export default (db) => {
                         
                         const r=await fetch('/send-message',{
                             method:'POST',
-                            headers:{'Content-Type':'application/json','x-csrf-token':'${res.locals.csrfToken}'},
+                            headers:{'Content-Type':'application/json','x-csrf-token':'${safeCsrf}'},
                             body:JSON.stringify({toUserId:t,contactInfo:c,messageText:x,source:'${activityName}'})
                         });
                         
@@ -205,7 +215,10 @@ export default (db) => {
                 </script>
                 </body></html>
             `);
-        } catch (error) { res.status(500).send('Ошибка.'); }
+        } catch (error) { 
+            console.error("CRITICAL ERROR IN ROUTE:", error); 
+            res.status(500).send('Ошибка сервера (уже чиним).'); 
+        }
     });
 
     return router;
