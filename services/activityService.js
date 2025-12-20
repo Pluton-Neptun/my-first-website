@@ -5,56 +5,70 @@ import { clearCache, LOGIN_PAGE_CACHE_KEY } from '../cacheService.js';
 const TRACK_LIST = ["Шахматы", "Футбол", "Танцы", "Хоккей", "Волейбол", "Походы", "Путешествие"];
 
 /**
- * 1. ДОБАВЛЕНИЕ АКТИВНОСТИ (Вызывается из профиля)
+ * 1. ДОБАВЛЕНИЕ АКТИВНОСТИ (Вызывается из профиля или при записи)
  */
 export async function addUserActivity(db, userId, activityName, limitRaw) {
     const limit = limitRaw ? parseInt(limitRaw) : null;
     const userIdObj = new ObjectId(userId);
 
-    // Создаем объект
+    // Создаем новый объект
     const newActivity = { name: activityName, limit: limit };
 
-    // 1. Удаляем старую запись об этой активности (чтобы обновить)
+    // 🔥 ИСПРАВЛЕНИЕ: Удаляем старую запись надежным способом (и строку, и объект)
+    // 1. Удаляем, если это объект с таким именем (игнорируя limit и прочее)
     await db.collection('users').updateOne(
         { _id: userIdObj },
-        { $pull: { activities: { $in: [activityName, { name: activityName }] } } }
+        { $pull: { activities: { name: activityName } } }
+    );
+    // 2. Удаляем, если это просто строка
+    await db.collection('users').updateOne(
+        { _id: userIdObj },
+        { $pull: { activities: activityName } }
     );
 
-    // 2. Добавляем новую
+    // Добавляем новую запись
     await db.collection('users').updateOne(
         { _id: userIdObj },
         { $push: { activities: newActivity } }
     );
 
-    // Сбрасываем кэш, так как данные изменились
+    // Сбрасываем кэш
     await clearCache(LOGIN_PAGE_CACHE_KEY);
 }
 
 /**
- * 2. УДАЛЕНИЕ АКТИВНОСТИ (Вызывается из профиля по крестику)
+ * 2. УДАЛЕНИЕ АКТИВНОСТИ (Вызывается из профиля по кнопке Отписаться)
  */
 export async function removeUserActivity(db, userId, activityName) {
+    const userIdObj = new ObjectId(userId);
+
+    // 🔥 ИСПРАВЛЕНИЕ: "Двойной удар" для 100% удаления
+    
+    // Шаг 1: Удаляем объект, у которого name === activityName (даже если есть limit)
     await db.collection('users').updateOne(
-        { _id: new ObjectId(userId) },
-        { $pull: { activities: { $in: [activityName, { name: activityName }] } } }
+        { _id: userIdObj },
+        { $pull: { activities: { name: activityName } } }
     );
+
+    // Шаг 2: Удаляем, если это записано просто как строка "Шахматы"
+    await db.collection('users').updateOne(
+        { _id: userIdObj },
+        { $pull: { activities: activityName } }
+    );
+
     await clearCache(LOGIN_PAGE_CACHE_KEY);
 }
 
 /**
- * 3. ПРОВЕРКА ЛИМИТОВ И ПОДСЧЕТ (Вызывается на Главной странице)
- * Возвращает готовые цифры для отображения: { footballCount: 5, chessCount: 2 ... }
+ * 3. ПРОВЕРКА ЛИМИТОВ И ПОДСЧЕТ (Оставил без изменений, тут логика верная)
  */
-export async function checkLimitsAndGetCounts(db) {
-    // Берем всех юзеров
+export async function checkLimitsAndGetCounts(db) { 
     const users = await db.collection("users").find().toArray();
     let cacheNeedsUpdate = false;
-
-    // Объект для результатов подсчета
-    const counts = {};
+    const counts = {}; 
 
     for (const sport of TRACK_LIST) {
-        // Находим всех игроков в этот спорт
+        // Находим всех игроков (учитываем и строки, и объекты)
         const players = users.filter(u => 
             Array.isArray(u.activities) && 
             u.activities.some(a => (a === sport) || (a.name === sport))
@@ -64,8 +78,8 @@ export async function checkLimitsAndGetCounts(db) {
 
         // --- ЛОГИКА АВТО-УДАЛЕНИЯ ---
         for (const player of players) {
-            // Ищем запись об активности
-            const activityRecord = player.activities.find(a => a.name === sport);
+            // Ищем запись об активности (только объекты имеют лимиты)
+            const activityRecord = player.activities.find(a => a && a.name === sport);
             
             // Если есть лимит И он достигнут
             if (activityRecord && activityRecord.limit && currentCount >= activityRecord.limit) {
@@ -79,10 +93,7 @@ export async function checkLimitsAndGetCounts(db) {
             }
         }
         
-        // Записываем кол-во (для отображения на сайте)
-        // Если кого-то удалили, цифра обновится при следующей загрузке, 
-        // но для текущего рендера берем currentCount (или currentCount - 1, если хотим супер-точность, но это не критично)
-        counts[sport] = currentCount;
+        counts[sport] = currentCount; 
     }
 
     if (cacheNeedsUpdate) {
