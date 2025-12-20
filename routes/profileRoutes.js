@@ -1,8 +1,9 @@
 
-import { removeUserActivity } from '../services/activityService.js';
-import express from 'express';
+import express from 'express'; 
 import { ObjectId } from "mongodb";
 import { clearCache, LOGIN_PAGE_CACHE_KEY } from '../cacheService.js';
+// 👇 Подключаем функцию удаления
+import { removeUserActivity } from '../services/activityService.js';
 
 const requireLogin = (req, res, next) => {
     if (req.session.user) next();
@@ -16,6 +17,7 @@ export default (db) => {
     router.get("/", requireLogin, async (req, res) => {
         try {
             res.set('Cache-Control', 'public, max-age=0, must-revalidate'); 
+            // Получаем свежие данные пользователя
             const user = await db.collection('users').findOne({ _id: ObjectId.createFromHexString(req.session.user._id) });
             const availability = user.availability || { days: [], time: "" };
 
@@ -24,7 +26,27 @@ export default (db) => {
             const eveningMessages = allMessages.filter(m => m.source && m.source.includes('После 19:00'));
             const otherMessages = allMessages.filter(m => !m.source || !m.source.includes('После 19:00'));
 
-            // 👇 ОБНОВЛЕННЫЙ РЕНДЕР СООБЩЕНИЙ С КНОПКОЙ УДАЛИТЬ
+            // 👇 ГЕНЕРАЦИЯ СПИСКА АКТИВНОСТЕЙ (С ИСПРАВЛЕНИЕМ БАГА УДАЛЕНИЯ)
+            const myActivities = user.activities || [];
+            const activitiesHtml = myActivities.length > 0 
+                ? myActivities.map(a => {
+                    // 🔥 ВАЖНО: Определяем имя, даже если это объект с лимитом
+                    const name = (a && typeof a === 'object') ? a.name : a;
+                    
+                    return `
+                        <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.1); padding:10px; margin-bottom:5px; border-radius:5px;">
+                            <span style="font-weight:bold;">${name}</span>
+                            <form action="/profile/activities/delete" method="POST" style="margin:0;">
+                                <input type="hidden" name="_csrf" value="${res.locals.csrfToken}">
+                                <input type="hidden" name="activityName" value="${name}">
+                                <button type="submit" style="background:#dc3545; padding:5px 10px; font-size:0.8em; width:auto;">Отписаться</button>
+                            </form>
+                        </div>
+                    `;
+                }).join('') 
+                : '<p style="color:#aaa; text-align:center; font-size:0.9em;">Вы пока никуда не записаны.</p>';
+
+            // Рендер сообщений
             const renderMsg = (m) => `
                 <div class="msg-card">
                     <div class="msg-head">
@@ -80,27 +102,13 @@ export default (db) => {
                         
                         .checkbox-group label { display: inline-block; margin-right: 15px; cursor: pointer; }
                     
-                        /* --- НАЧАЛО МОБИЛЬНЫХ НАСТРОЕК --- */
-                        @media (max-width: 768px) {
-                            body {
-                                background-attachment: scroll; 
-                                background-position: center center;
-                            }
-                            .content {
-                                width: 95%; 
-                                margin: 10px auto; 
-                                padding: 15px; 
-                            }
-                            button, .btn {
-                                padding: 15px; 
-                                font-size: 18px;
-                            }
-                            body {
-                                font-size: 16px;
-                            }
+                        @media (max-width: 768px) { 
+                            body { background-attachment: scroll; background-position: center center; }
+                            .content { width: 95%; margin: 10px auto; padding: 15px; }
+                            button, .btn { padding: 15px; font-size: 18px; }
+                            body { font-size: 16px; }
                         }
-                        /* --- КОНЕЦ МОБИЛЬНЫХ НАСТРОЕК --- */
-                    </style>
+                    </style> 
                 </head>
                 <body>
                     <div class="content">
@@ -129,6 +137,10 @@ export default (db) => {
                         </div>  
                         <hr>
                         
+                        <h3>Мои записи</h3>
+                        <div style="margin-bottom:20px;">
+                            ${activitiesHtml}
+                        </div>
                         <h3>Ваши данные:</h3>
                         <form action="/profile/update-availability" method="POST">
                             <input type="hidden" name="_csrf" value="${res.locals.csrfToken}">
@@ -175,7 +187,7 @@ export default (db) => {
                     </script>
                 </body></html>
             `);
-        } catch (error) { res.status(500).send("Ошибка."); }
+        } catch (error) { console.error(error); res.status(500).send("Ошибка."); }
     });
 
     // 2. НОВАЯ ОТДЕЛЬНАЯ СТРАНИЦА "ПОСЛЕ 19:00"
@@ -197,9 +209,7 @@ export default (db) => {
                     button{background: linear-gradient(45deg, #e056fd, #be2edd); color:white;border:none;cursor:pointer; font-weight:bold; font-size:1.1em;}
                     button:hover{opacity:0.9;}
                     .btn-back{display:block; text-align:center; color:#ccc; margin-top:15px; text-decoration:none;}
-                    
-                    /* МОБИЛЬНАЯ АДАПТАЦИЯ ДЛЯ ЭТОЙ СТРАНИЦЫ */
-                    @media (max-width: 768px) {
+                    @media (max-width: 768px) { 
                         body { background-attachment: scroll; }
                         .content { width: 95%; margin: 20px auto; padding: 15px; }
                         button { padding: 15px; font-size: 18px; }
@@ -208,22 +218,18 @@ export default (db) => {
             </head>
             <body>
                 <div class="content">
-                    <h2>🌙 Опубликовать: После 19:00</h2>
+                    <h2>🌙 Опубликовать: После 19:00</h2> 
                     <p style="text-align:center; color:#aaa; margin-bottom:20px;">Ваше объявление появится на общей доске.</p>
                     
                     <form action="/evening/add" method="POST">
                         <input type="hidden" name="_csrf" value="${res.locals.csrfToken}">
-                        
-                        <label>Ваше время:</label>
-                        <input type="text" name="time" placeholder="Пример: 20:30" required>
-                        
-                        <label>Ваш контакт:</label>
+                        <label>Ваше время:</label> 
+                        <input type="text" name="time" placeholder="Пример: 20:30" required> 
+                        <label>Ваш контакт:</label> 
                         <input type="text" name="contact" value="${user.phone||''}" placeholder="Телефон или Telegram" required>
-                        
-                        <label>Ваши планы:</label>
+                        <label>Ваши планы:</label> 
                         <textarea name="text" placeholder="Иду в кино / Ищу компанию на ужин / Кальян..." required style="height:100px;"></textarea>
-                        
-                        <button type="submit">Опубликовать</button>
+                        <button type="submit">Опубликовать</button> 
                     </form>
                     
                     <a href="/profile" class="btn-back">⬅ Вернуться в кабинет</a>
@@ -247,21 +253,17 @@ export default (db) => {
         await db.collection("comments").insertOne({ authorName: req.session.user.name, text: req.body.commentText, createdAt: new Date() });
         await clearCache(LOGIN_PAGE_CACHE_KEY); 
         res.redirect("/profile");
-    });
+    }); 
 
-    // 👇 ДОБАВЛЕН МАРШРУТ УДАЛЕНИЯ СООБЩЕНИЙ
-    router.post('/messages/delete/:id', requireLogin, async (req, res) => {
-        try {
+    router.post('/messages/delete/:id', requireLogin, async (req, res) => { 
+        try { 
             const messageId = req.params.id;
             const userId = ObjectId.createFromHexString(req.session.user._id);
-            
-            // Удаляем сообщение только если оно принадлежит текущему юзеру
-            await db.collection('messages').deleteOne({
+            await db.collection('messages').deleteOne({ 
                 _id: new ObjectId(messageId),
                 toUserId: userId
             });
-            
-            res.redirect('/profile');
+            res.redirect('/profile'); 
         } catch (e) {
             console.error(e);
             res.status(500).send("Ошибка удаления");
@@ -285,12 +287,13 @@ export default (db) => {
         }
     });
 
-// 5. УДАЛЕНИЕ АКТИВНОСТИ (Связь с новым сервисом)
+    // 5. УДАЛЕНИЕ АКТИВНОСТИ (ИСПРАВЛЕННАЯ СВЯЗЬ)
     router.post('/activities/delete', requireLogin, async (req, res) => {
         try {
-            const { activityName } = req.body; // Получаем название, например "Волейбол"
+            const { activityName } = req.body; 
+            // Сервис теперь сам разберется, удалять строку или объект
             await removeUserActivity(db, req.session.user._id, activityName);
-            res.redirect('/profile'); // Или redirect('/activities'), смотря где была нажата кнопка
+            res.redirect('/profile'); 
         } catch (e) {
             console.error(e);
             res.status(500).send("Ошибка при удалении активности");
