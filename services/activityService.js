@@ -91,7 +91,7 @@ export async function checkLimitsAndGetCounts(db) {
                 console.log(`AUTO-DELETE: ${sport} у ${player.name} (Лимит ${activityRecord.limit}, набрано ${currentCount})`);
                 cacheNeedsUpdate = true;
             }
-        }
+        } 
         
         counts[sport] = currentCount; 
     }
