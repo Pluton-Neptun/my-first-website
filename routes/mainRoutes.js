@@ -1,7 +1,7 @@
 import express from 'express';
-// 👇 ДОБАВЛЕН ИМПОРТ ObjectId (нужен для базы данных)
-import { ObjectId } from 'mongodb'; 
+import { ObjectId } from 'mongodb';  
 import { getCache, setCache, LOGIN_PAGE_CACHE_KEY } from '../cacheService.js';
+// 👇 Импортируем наш надежный сервис подсчета
 import { checkLimitsAndGetCounts } from '../services/activityService.js';
 
 function isImage(filename) { return filename && filename.match(/\.(jpg|jpeg|png|gif|webp)$/i); }
@@ -9,18 +9,16 @@ function isImage(filename) { return filename && filename.match(/\.(jpg|jpeg|png|
 export default (db) => {
     const router = express.Router();
 
-    // 1. ОТПРАВКА СООБЩЕНИЯ (ИСПРАВЛЕНО)
+    // 1. ОТПРАВКА СООБЩЕНИЯ
     router.post('/send-message', async (req, res) => {
         try {
             const { toUserId, imageId, messageText, contactInfo, source } = req.body;
             
-            // 👇 ПРЕВРАЩАЕМ ID В ПРАВИЛЬНЫЙ ФОРМАТ (ObjectId), ИНАЧЕ СООБЩЕНИЕ НЕ НАЙДЕТСЯ
-            let receiverId;
+            let receiverId; 
             try {
                 receiverId = new ObjectId(toUserId);
             } catch (e) {
-                // Если toUserId пришел кривой или пустой, пробуем найти через картинку
-                if (imageId) {
+                if (imageId) { 
                     const img = await db.collection('tasks').findOne({ _id: new ObjectId(imageId) });
                     if (img) receiverId = new ObjectId(img.userId);
                 }
@@ -31,7 +29,7 @@ export default (db) => {
             }
 
             await db.collection('messages').insertOne({
-                toUserId: receiverId, // Теперь это точно ObjectId
+                toUserId: receiverId, 
                 fromContact: contactInfo || "Гость",
                 imageId: imageId ? new ObjectId(imageId) : null, 
                 source: source || "Галерея",
@@ -48,41 +46,46 @@ export default (db) => {
         }
     });
 
-    // 2. ГЛАВНАЯ СТРАНИЦА (LOGIN) 
-    router.get("/login", async (req, res) => { 
+    // 2. ГЛАВНАЯ СТРАНИЦА (И LOGIN, И ROOT)
+    // 🔥 ИСПРАВЛЕНИЕ: Добавил "/" чтобы работала главная ссылка mikky.kz
+    router.get(["/", "/login"], async (req, res) => { 
         try {
             res.set('Cache-Control', 'public, max-age=0, must-revalidate'); 
             
-            let pageData = await getCache(LOGIN_PAGE_CACHE_KEY); 
-            if (!pageData) {
-                // 1. Сначала запускаем проверку лимитов и авто-удаление
-                // Функция вернет объект типа: { "Шахматы": 2, "Футбол": 5 }
-                const activityCounts = await checkLimitsAndGetCounts(db);
+            // 🔥 ВАЖНО: Сначала считаем свежие цифры (ВСЕГДА, даже если есть кэш)
+            // Это гарантирует, что авто-удаление сработает, и цифры будут точными
+            const activityCounts = await checkLimitsAndGetCounts(db);
 
-                // 2. Загружаем остальные данные
+            // Теперь пробуем достать "тяжелый" контент (комментарии, фото) из кэша
+            let pageData = await getCache(LOGIN_PAGE_CACHE_KEY); 
+            
+            if (!pageData) {
+                // Если кэша нет - грузим из базы
                 const comments = await db.collection("comments").find().sort({ createdAt: -1 }).toArray(); 
-               const tasks = await db.collection('tasks').find().sort({ createdAt: -1 }).toArray(); 
+                const tasks = await db.collection('tasks').find().sort({ createdAt: -1 }).toArray(); 
                 const readyDocs = await db.collection('ready_documents').find().sort({ completedAt: -1 }).toArray(); 
                 
-                // 3. Собираем данные для страницы, подставляя цифры из нашего сервиса
-                pageData = { 
-                    comments, tasks, readyDocs,
-                    chessCount: activityCounts["Шахматы"] || 0,
-                    footballCount: activityCounts["Футбол"] || 0,
-                    danceCount: activityCounts["Танцы"] || 0,
-                    hockeyCount: activityCounts["Хоккей"] || 0,
-                    volleyCount: activityCounts["Волейбол"] || 0,
-                    hikingCount: activityCounts["Походы"] || 0,
-                    travelCount: activityCounts["Путешествие"] || 0,
-                }; 
+                // Сохраняем в объект (цифры пока нули, мы их обновим ниже)
+                pageData = { comments, tasks, readyDocs }; 
                 
+                // Сохраняем в память сервера
                 await setCache(LOGIN_PAGE_CACHE_KEY, pageData); 
             }
+
+            // 🔥 ОБНОВЛЯЕМ ЦИФРЫ В pageData СВЕЖИМИ ДАННЫМИ
+            // Мы перезаписываем то, что было в кэше, актуальными значениями прямо сейчас
+            pageData.chessCount = activityCounts["Шахматы"] || 0;
+            pageData.footballCount = activityCounts["Футбол"] || 0;
+            pageData.danceCount = activityCounts["Танцы"] || 0;
+            pageData.hockeyCount = activityCounts["Хоккей"] || 0;
+            pageData.volleyCount = activityCounts["Волейбол"] || 0;
+            pageData.hikingCount = activityCounts["Походы"] || 0;
+            pageData.travelCount = activityCounts["Путешествие"] || 0;
  
+            // Рендеринг HTML
             let commentsHtml = pageData.comments.map(c => `<div class="comment"><b>${c.authorName}:</b> ${c.text}</div>`).join('');
             
-            // --- ЛОГИКА ОТОБРАЖЕНИЯ КАРТИНОК ---
-            const renderGalleryItem = (t, isReadyDoc = false) => {
+            const renderGalleryItem = (t, isReadyDoc = false) => { 
                 let src = '';
                 let isImg = isImage(t.fileName);
 
