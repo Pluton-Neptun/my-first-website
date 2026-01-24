@@ -1,5 +1,5 @@
 import express from 'express';
-import { ObjectId } from 'mongodb';  
+import { ObjectId } from 'mongodb'; 
 import { getCache, setCache, LOGIN_PAGE_CACHE_KEY } from '../cacheService.js';
 // 👇 Импортируем наш надежный сервис подсчета
 import { checkLimitsAndGetCounts } from '../services/activityService.js';
@@ -53,8 +53,14 @@ export default (db) => {
             res.set('Cache-Control', 'public, max-age=0, must-revalidate'); 
             
             // 🔥 ВАЖНО: Сначала считаем свежие цифры (ВСЕГДА, даже если есть кэш)
-            // Это гарантирует, что авто-удаление сработает, и цифры будут точными
-            const activityCounts = await checkLimitsAndGetCounts(db);
+            // ЗАЩИТА ОТ ОШИБКИ 500: Оборачиваем в try/catch
+            let activityCounts = {};
+            try {
+                 activityCounts = await checkLimitsAndGetCounts(db);
+            } catch (err) {
+                 console.error("Ошибка подсчета активностей (сайт работает, но цифры 0):", err);
+                 // Если база упала при подсчете, activityCounts останется пустым объектом, страница загрузится
+            }
 
             // Теперь пробуем достать "тяжелый" контент (комментарии, фото) из кэша
             let pageData = await getCache(LOGIN_PAGE_CACHE_KEY); 
@@ -133,6 +139,7 @@ export default (db) => {
                     <meta charset="UTF-8">
                     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
                     <title>Вход</title>
+                    <link rel="canonical" href="https://mikky.kz/" />
                     <script src="/ga.js"></script>
                     <style>
                      html { scroll-snap-type: y mandatory; }

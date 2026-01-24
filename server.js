@@ -1,6 +1,5 @@
-// server.js (Обновленный)
-import express from "express";
-import bodyParser from "body-parser";
+import express from "express"; 
+import bodyParser from "body-parser"; 
 import path from "path";
 import { fileURLToPath } from 'url';
 import session from "express-session";
@@ -93,7 +92,7 @@ async function connectToDb() {
         db = mongoClient.db("my-first-website-db");
 
         // ============================================================
-        // 🗺️ АВТОМАТИЧЕСКАЯ ГЕНЕРАЦИЯ SITEMAP.XML
+        // 🗺️ АВТОМАТИЧЕСКАЯ ГЕНЕРАЦИЯ SITEMAP.XML (ИСПРАВЛЕНО)
         // ============================================================
         app.get('/sitemap.xml', async (req, res) => {
             res.header('Content-Type', 'application/xml');
@@ -103,15 +102,12 @@ async function connectToDb() {
                 const smStream = new SitemapStream({ hostname: 'https://mikky.kz' });
                 const pipeline = smStream.pipe(createGzip());
 
-                // 1. Статические страницы
+                // 1. Статические страницы (ТОЛЬКО ПУБЛИЧНЫЕ)
                 smStream.write({ url: '/', changefreq: 'daily', priority: 1.0 });
                 smStream.write({ url: '/login', changefreq: 'monthly', priority: 0.8 });
-                smStream.write({ url: '/register.html', changefreq: 'monthly', priority: 0.8 });
+                // /evening УДАЛЕН, ТАК КАК ТРЕБУЕТ ВХОДА И ВЫЗЫВАЕТ ОШИБКУ РЕДИРЕКТА У РОБОТА
 
-                // 2. Страница "Вечер" (Она публичная, поэтому добавляем)
-                smStream.write({ url: '/evening', changefreq: 'daily', priority: 0.8 });
-
-                // 3. Активности (берем список из вашего файла activitiesRoutes)
+                // 2. Активности (Они публичные, оставляем)
                 const myActivities = [
                     "Шахматы",
                     "Футбол",
