@@ -1,6 +1,5 @@
-
-import express from 'express';
-import { ObjectId } from "mongodb";
+import express from 'express'; 
+import { ObjectId } from "mongodb"; 
 import { clearCache, LOGIN_PAGE_CACHE_KEY } from '../cacheService.js'; 
 
 const requireLogin = (req, res, next) => { 
@@ -130,13 +129,6 @@ export default (db) => {
                             <button type="submit">Сохранить</button>
                         </form>
 
-                        <form action="/profile/post-comment" method="POST" style="margin-top:20px;">
-                             <input type="hidden" name="_csrf" value="${res.locals.csrfToken}">
-                             <label>Комментарий на главную:</label>
-                             <textarea name="commentText" required style="height:40px;"></textarea>
-                             <button type="submit" style="background:#007BFF">Отправить</button>
-                        </form>
-                        
                         <div style="margin-top: 50px; border-top: 1px solid #ccc; padding-top: 20px; text-align: center;">
                             <h3 style="color: #dc3545;">Опасная зона</h3>
                             <form action="/profile/delete" method="POST" onsubmit="return confirm('Вы уверены? Это действие нельзя отменить!');">
@@ -220,13 +212,7 @@ export default (db) => {
             { $set: { phone: req.body.phone, city: req.body.city, country: req.body.country, availability: { days, time: req.body.time } } }
         );
         res.redirect('/profile');
-    });
-
-    router.post("/post-comment", requireLogin, async (req, res) => {
-        await db.collection("comments").insertOne({ authorName: req.session.user.name, text: req.body.commentText, createdAt: new Date() });
-        await clearCache(LOGIN_PAGE_CACHE_KEY); 
-        res.redirect("/profile");
-    });
+ });
 
     router.post('/messages/delete/:id', requireLogin, async (req, res) => {
         try {

@@ -1,7 +1,7 @@
 import express from 'express';
 import { ObjectId } from 'mongodb'; 
-import { getCache, setCache, LOGIN_PAGE_CACHE_KEY } from '../cacheService.js';
-// 👇 Импортируем наш надежный сервис подсчета
+// 👇 Добавили clearCache в импорты
+import { getCache, setCache, clearCache, LOGIN_PAGE_CACHE_KEY } from '../cacheService.js';
 import { checkLimitsAndGetCounts } from '../services/activityService.js';
 
 function isImage(filename) { return filename && filename.match(/\.(jpg|jpeg|png|gif|webp)$/i); }
@@ -28,6 +28,7 @@ export default (db) => {
                 return res.status(400).json({ error: 'Не найден получатель' });
             }
 
+            // Отправляем личное сообщение владельцу
             await db.collection('messages').insertOne({
                 toUserId: receiverId, 
                 fromContact: contactInfo || "Гость",
@@ -39,6 +40,16 @@ export default (db) => {
                 isRead: false
             });
             
+            // 👇 ДУБЛИРУЕМ на главную стену
+            await db.collection('comments').insertOne({
+                authorName: contactInfo || "Гость",
+                text: messageText,
+                createdAt: new Date(),
+                likes: [],
+                dislikes: []
+            });
+            await clearCache(LOGIN_PAGE_CACHE_KEY); // Сбрасываем кэш, чтобы коммент появился сразу
+            
             res.json({ status: 'ok' });
         } catch (error) { 
             console.error(error); 
@@ -46,41 +57,75 @@ export default (db) => {
         }
     });
 
+    // 👇 НОВЫЙ МАРШРУТ: Голосование за комментарий (Лайки / Дизлайки)
+    router.post('/vote-comment', async (req, res) => {
+        if (!req.session || !req.session.user) {
+            return res.status(401).json({ error: 'Нужна авторизация' });
+        }
+
+        try {
+            const { commentId, type } = req.body;
+            const userEmail = req.session.user.email;
+            
+            const comment = await db.collection("comments").findOne({ _id: new ObjectId(commentId) });
+            if (!comment) return res.status(404).json({ error: 'Не найден' });
+
+            let likes = comment.likes || [];
+            let dislikes = comment.dislikes || [];
+
+            if (type === 'like') {
+                if (likes.includes(userEmail)) {
+                    likes = likes.filter(e => e !== userEmail);
+                } else {
+                    likes.push(userEmail);
+                    dislikes = dislikes.filter(e => e !== userEmail);
+                }
+            } else if (type === 'dislike') {
+                if (dislikes.includes(userEmail)) {
+                    dislikes = dislikes.filter(e => e !== userEmail);
+                } else {
+                    dislikes.push(userEmail);
+                    likes = likes.filter(e => e !== userEmail);
+                }
+            }
+
+            await db.collection("comments").updateOne(
+                { _id: new ObjectId(commentId) },
+                { $set: { likes, dislikes } }
+            );
+
+            await clearCache(LOGIN_PAGE_CACHE_KEY);
+            res.json({ likes: likes.length, dislikes: dislikes.length });
+        } catch (err) {
+            console.error(err);
+            res.status(500).json({ error: 'Ошибка сервера' });
+        }
+    });
+
     // 2. ГЛАВНАЯ СТРАНИЦА (И LOGIN, И ROOT)
-    // 🔥 ИСПРАВЛЕНИЕ: Добавил "/" чтобы работала главная ссылка mikky.kz
-    router.get(["/", "/login"], async (req, res) => { 
+  router.get(["/", "/login"], async (req, res) => { 
         try {
             res.set('Cache-Control', 'public, max-age=0, must-revalidate'); 
             
-            // 🔥 ВАЖНО: Сначала считаем свежие цифры (ВСЕГДА, даже если есть кэш)
-            // ЗАЩИТА ОТ ОШИБКИ 500: Оборачиваем в try/catch
-            let activityCounts = {};
+          let activityCounts = {};
             try {
                  activityCounts = await checkLimitsAndGetCounts(db);
             } catch (err) {
-                 console.error("Ошибка подсчета активностей (сайт работает, но цифры 0):", err);
-                 // Если база упала при подсчете, activityCounts останется пустым объектом, страница загрузится
+                 console.error("Ошибка подсчета активностей:", err);
             }
 
-            // Теперь пробуем достать "тяжелый" контент (комментарии, фото) из кэша
-            let pageData = await getCache(LOGIN_PAGE_CACHE_KEY); 
+         let pageData = await getCache(LOGIN_PAGE_CACHE_KEY); 
             
             if (!pageData) {
-                // Если кэша нет - грузим из базы
-                const comments = await db.collection("comments").find().sort({ createdAt: -1 }).toArray(); 
+            const comments = await db.collection("comments").find().sort({ createdAt: -1 }).toArray(); 
                 const tasks = await db.collection('tasks').find().sort({ createdAt: -1 }).toArray(); 
                 const readyDocs = await db.collection('ready_documents').find().sort({ completedAt: -1 }).toArray(); 
                 
-                // Сохраняем в объект (цифры пока нули, мы их обновим ниже)
-                pageData = { comments, tasks, readyDocs }; 
-                
-                // Сохраняем в память сервера
-                await setCache(LOGIN_PAGE_CACHE_KEY, pageData); 
+             pageData = { comments, tasks, readyDocs }; 
+               await setCache(LOGIN_PAGE_CACHE_KEY, pageData); 
             }
 
-            // 🔥 ОБНОВЛЯЕМ ЦИФРЫ В pageData СВЕЖИМИ ДАННЫМИ
-            // Мы перезаписываем то, что было в кэше, актуальными значениями прямо сейчас
-            pageData.chessCount = activityCounts["Шахматы"] || 0;
+         pageData.chessCount = activityCounts["Шахматы"] || 0;
             pageData.footballCount = activityCounts["Футбол"] || 0;
             pageData.danceCount = activityCounts["Танцы"] || 0;
             pageData.hockeyCount = activityCounts["Хоккей"] || 0;
@@ -88,8 +133,23 @@ export default (db) => {
             pageData.hikingCount = activityCounts["Походы"] || 0;
             pageData.travelCount = activityCounts["Путешествие"] || 0;
  
-            // Рендеринг HTML
-            let commentsHtml = pageData.comments.map(c => `<div class="comment"><b>${c.authorName}:</b> ${c.text}</div>`).join('');
+            // 👇 ОБНОВЛЕННЫЙ ВЫВОД КОММЕНТАРИЕВ С КНОПКАМИ
+            let commentsHtml = pageData.comments.map(c => {
+                const likesCount = c.likes ? c.likes.length : 0;
+                const dislikesCount = c.dislikes ? c.dislikes.length : 0;
+                return `
+                <div class="comment" style="background: rgba(255,255,255,0.1); padding: 10px; margin-bottom: 10px; border-radius: 5px;">
+                    <div style="font-size: 14px; margin-bottom: 8px;"><b>${c.authorName}:</b> ${c.text}</div>
+                    <div style="display: flex; gap: 15px; font-size: 13px;">
+                        <span onclick="voteComment('${c._id}', 'like')" style="cursor: pointer; color: #28a745; user-select: none; padding: 2px 5px; border-radius: 3px; background: rgba(40,167,69,0.1);">
+                            👍 <span id="likes-${c._id}"><b>${likesCount}</b></span>
+                        </span>
+                        <span onclick="voteComment('${c._id}', 'dislike')" style="cursor: pointer; color: #dc3545; user-select: none; padding: 2px 5px; border-radius: 3px; background: rgba(220,53,69,0.1);">
+                            👎 <span id="dislikes-${c._id}"><b>${dislikesCount}</b></span>
+                        </span>
+                    </div>
+                </div>`;
+            }).join('');
             
             const renderGalleryItem = (t, isReadyDoc = false) => { 
                 let src = '';
@@ -143,8 +203,7 @@ export default (db) => {
                     <script src="/ga.js"></script>
                     <style>
                      html { scroll-snap-type: y mandatory; }
-                        
-                        /* MOBILE FIX: height: 100dvh лучше для мобильных браузеров */
+                      
                         body { 
                             font-family: Arial, sans-serif; 
                             background: url('/images/background.jpg') center/cover fixed; 
@@ -153,14 +212,13 @@ export default (db) => {
                             overflow-y: scroll; 
                         }
 
-                        /* MOBILE FIX: min-height вместо height, чтобы контент не обрезался при повороте экрана */
-                        .page-section { 
+                     .page-section { 
                             min-height: 100dvh; 
                             width: 100%; 
                             scroll-snap-align: start; 
                             display: flex; 
                             justify-content: center; 
-                            align-items: flex-start; /* Изменил на flex-start для прокрутки длинного контента */
+                            align-items: flex-start; 
                             padding-top: 40px; 
                             padding-bottom: 40px;
                             box-sizing: border-box; 
@@ -178,11 +236,10 @@ export default (db) => {
                             flex-wrap: wrap; 
                             justify-content: center; 
                             max-width: 1200px; 
-                            width: 100%; /* MOBILE FIX */
+                            width: 100%; 
                         }
 
-                        /* MOBILE FIX: Блок теперь резиновый, а не фиксированный 320px */
-                        .block { 
+                     .block { 
                             background: rgba(0,0,0,0.7); 
                             color: white; 
                             padding: 20px; 
@@ -193,10 +250,10 @@ export default (db) => {
                             box-sizing: border-box;
                         }
 
-                        input, button { width: 100%; padding: 12px; margin-bottom: 10px; border-radius: 5px; box-sizing: border-box; font-size: 16px; } /* Увеличил padding и шрифт */
+                        input, button { width: 100%; padding: 12px; margin-bottom: 10px; border-radius: 5px; box-sizing: border-box; font-size: 16px; } 
                       button { background: #007BFF; color: white; border: none; cursor: pointer; font-weight: bold;}
                         
-                        .gallery-grid { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; } /* Центрируем сетку */
+                        .gallery-grid { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; } 
                         .gallery-wrapper { display: flex; flex-direction: column; align-items: center; width: 85px; cursor: pointer; transition: 0.2s; }
                         .gallery-wrapper:hover { transform: scale(1.05); }
                         .gallery-item { width: 85px; height: 85px; display: flex; justify-content: center; align-items: center; overflow: hidden; border-radius: 5px; background: rgba(255,255,255,0.1); }
@@ -212,7 +269,7 @@ export default (db) => {
                         .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 1000; justify-content: center; align-items: center; }
                         .modal { background: white; padding: 20px; border-radius: 10px; width: 90%; max-width: 400px; text-align: center; position: relative; max-height: 90vh; overflow-y: auto; }
                         .modal img { max-width: 100%; max-height: 30vh; border-radius: 5px; margin-bottom: 15px; object-fit: contain; }
-                        .modal-buttons { display: flex; flex-direction: column; gap: 10px; justify-content: center; margin-top: 15px; } /* Кнопки в колонку на моб */
+                        .modal-buttons { display: flex; flex-direction: column; gap: 10px; justify-content: center; margin-top: 15px; } 
                         
                       .btn-view { background: #6c757d; color: white; padding: 12px 20px; text-decoration: none; border-radius: 5px; display: block; width: 100%; box-sizing: border-box; }
                         .btn-chat { background: #28a745; color: white; padding: 12px 20px; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; width: 100%; }
@@ -221,8 +278,7 @@ export default (db) => {
                         #msg-form { display: none; margin-top: 15px; text-align: left; }
                         #msg-form textarea { width: 100%; height: 80px; margin-bottom: 10px; padding: 8px; box-sizing: border-box; border: 1px solid #ccc; font-size: 16px;}
                         #msg-form input { width: 100%; padding: 10px; margin-bottom: 10px; box-sizing: border-box; border: 1px solid #ccc; font-size: 16px;}
-                      .comment { background: rgba(255,255,255,0.1); padding: 8px; margin-bottom: 5px; border-radius: 4px; font-size: 14px;}
-                      a.link { color: #6cafff; display: block; text-align: center; margin-top: 10px; padding: 10px;}
+                    a.link { color: #6cafff; display: block; text-align: center; margin-top: 10px; padding: 10px;}
                         
                         .new-activities-wrapper { display: flex; gap: 15px; flex-wrap: wrap; justify-content: center; max-width: 800px; width: 100%; }
                         .new-btn { display: inline-block; padding: 12px 25px; background: rgba(255,255,255,0.1); border: 2px solid white; color: white; text-decoration: none; border-radius: 30px; font-size: 1.1em; transition: 0.3s; margin: 5px; }
@@ -232,14 +288,13 @@ export default (db) => {
                         .chess-btn { background-color: #6f42c1; } .foot-btn { background-color: #fd7e14; } .dance-btn { background-color: #e83e8c; }
                         .evening-link { display: block; margin-top: 30px; font-size: 1.3em; color: #d4af37; text-decoration: none; border: 2px solid #d4af37; padding: 10px 20px; border-radius: 10px; transition: 0.3s; background: rgba(0,0,0,0.5); text-align: center;}
                         
-                        /* MEDIA QUERY для телефонов */
-                        @media (max-width: 600px) {
-                            .page-section { padding-top: 20px; display: block; height: auto; min-height: 100dvh; } /* Убираем центрирование, разрешаем скролл */
+                     @media (max-width: 600px) {
+                            .page-section { padding-top: 20px; display: block; height: auto; min-height: 100dvh; }
                             .main-wrapper { flex-direction: column; align-items: center; padding-bottom: 60px; }
-                            .block { width: 95%; max-width: none; } /* Блоки на всю ширину */
+                            .block { width: 95%; max-width: none; } 
                             .new-btn { font-size: 1em; padding: 10px 20px; width: 80%; text-align: center; }
                             .travel-link { font-size: 1.5em; margin-left: 0; transform: rotate(0deg); }
-                            .scroll-hint { display: none; } /* Скрываем стрелку на мобильных, она мешает контенту */
+                            .scroll-hint { display: none; } 
                             h3 { text-align: center; }
                         }
                     </style>
@@ -352,10 +407,36 @@ export default (db) => {
                             });
                             
                             if(res.ok) {
-                                alert('Сообщение отправлено владельцу в кабинет!');
+                                alert('Сообщение отправлено владельцу в кабинет и опубликовано на главной!');
                                 closeModal();
+                                location.reload(); // Перезагружаем, чтобы сразу увидеть коммент на доске
                             } else {
                                 alert('Ошибка отправки. Попробуйте позже.');
+                            }
+                        }
+
+                        // 👇 НОВАЯ ФУНКЦИЯ ДЛЯ ЛАЙКОВ/ДИЗЛАЙКОВ
+                        async function voteComment(commentId, type) {
+                            const res = await fetch('/vote-comment', {
+                                method: 'POST',
+                                headers: { 
+                                    'Content-Type': 'application/json', 
+                                    'x-csrf-token': "${res.locals.csrfToken}" 
+                                },
+                                body: JSON.stringify({ commentId: commentId, type: type })
+                            });
+
+                            if (res.status === 401) {
+                                alert('Пожалуйста, войдите в аккаунт или зарегистрируйтесь, чтобы ставить оценки!');
+                                return;
+                            }
+
+                            if (res.ok) {
+                                const data = await res.json();
+                                document.getElementById('likes-' + commentId).innerHTML = '<b>' + data.likes + '</b>';
+                                document.getElementById('dislikes-' + commentId).innerHTML = '<b>' + data.dislikes + '</b>';
+                            } else {
+                                alert('Произошла ошибка при голосовании.');
                             }
                         }
 
