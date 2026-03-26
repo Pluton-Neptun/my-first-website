@@ -1,5 +1,5 @@
 import express from 'express';
-import { ObjectId } from 'mongodb';  
+import { ObjectId } from 'mongodb'; 
 import { getCache, setCache, clearCache, LOGIN_PAGE_CACHE_KEY } from '../cacheService.js';
 import { checkLimitsAndGetCounts } from '../services/activityService.js';
 
@@ -27,7 +27,7 @@ export default (db) => {
                 return res.status(400).json({ error: 'Не найден получатель' });
             }
 
-            await db.collection('messages').insertOne({ 
+            await db.collection('messages').insertOne({
                 toUserId: receiverId, 
                 fromContact: contactInfo || "Гость",
                 imageId: imageId ? new ObjectId(imageId) : null, 
@@ -38,7 +38,7 @@ export default (db) => {
                 isRead: false
             });
             
-            await db.collection('comments').insertOne({ 
+            await db.collection('comments').insertOne({
                 authorName: contactInfo || "Гость",
                 text: messageText,
                 createdAt: new Date(),
@@ -104,8 +104,7 @@ export default (db) => {
         try {
             res.set('Cache-Control', 'public, max-age=0, must-revalidate'); 
             
-            // 👇 ДОСТАЕМ ТЕКУЩЕГО ПОЛЬЗОВАТЕЛЯ ИЗ СЕССИИ
-            const currentUser = req.session && req.session.user ? req.session.user : null;
+             const currentUser = req.session && req.session.user ? req.session.user : null;
             
             let activityCounts = {};
             try {
@@ -119,9 +118,8 @@ export default (db) => {
             if (!pageData) {
                 const comments = await db.collection("comments").find().sort({ createdAt: -1 }).toArray(); 
                 const tasks = await db.collection('tasks').find().sort({ createdAt: -1 }).toArray(); 
-                const readyDocs = await db.collection('ready_documents').find().sort({ completedAt: -1 }).toArray(); 
-                
-                pageData = { comments, tasks, readyDocs }; 
+                // Убрали загрузку готовых документов, так как мы заменили блок
+                pageData = { comments, tasks }; 
                 await setCache(LOGIN_PAGE_CACHE_KEY, pageData); 
             }
 
@@ -133,7 +131,8 @@ export default (db) => {
             pageData.hikingCount = activityCounts["Походы"] || 0;
             pageData.travelCount = activityCounts["Путешествие"] || 0;
  
-            let commentsHtml = pageData.comments.map(c => { 
+            // Рендер комментариев на стене
+            let commentsHtml = pageData.comments.map(c => {
                 const likesCount = c.likes ? c.likes.length : 0;
                 const dislikesCount = c.dislikes ? c.dislikes.length : 0;
                 return `
@@ -149,28 +148,58 @@ export default (db) => {
                     </div>
                 </div>`;
             }).join('');
-            
-            const renderGalleryItem = (t, isReadyDoc = false) => { 
-                let src = '';
-                let isImg = isImage(t.fileName);
 
-                if (t.imageBase64) { 
-                    src = `data:${t.mimetype || 'image/jpeg'};base64,${t.imageBase64}`;
-                    isImg = true; 
-                } 
-                else { 
-                    src = `/uploads/${t.fileName}`;
+            // 👇 НОВОЕ: ФОРМИРУЕМ ИСТОРИЮ ЛАЙКОВ/ДИЗЛАЙКОВ
+            let historyItems = [];
+            pageData.comments.forEach(c => {
+                const shortText = c.text.length > 25 ? c.text.substring(0, 25) + '...' : c.text;
+                if (c.likes) {
+                    c.likes.forEach(email => historyItems.push({ type: 'like', email, text: shortText, date: c.createdAt }));
                 }
-
-                const content = isImg 
-                    ? `<img src="${src}" alt="${t.originalName}" loading="lazy">` 
-                    : `<div class="file-icon">${isReadyDoc ? '✅' : '📄'}</div>`;
-
-                const borderClass = isReadyDoc ? 'ready-border' : 'work-border';
-                
-                if (isReadyDoc) { 
-                    return `<a href="${src}" target="_blank" class="gallery-item ${borderClass}">${content}</a>`;
+                if (c.dislikes) {
+                    c.dislikes.forEach(email => historyItems.push({ type: 'dislike', email, text: shortText, date: c.createdAt }));
                 }
+            });
+
+            // Сортируем (свежие выше)
+            historyItems.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+            let freeDislikesShown = 0;
+            let historyHtml = historyItems.map(item => {
+                if (item.type === 'like') {
+                    return `
+                        <div style="background: rgba(40,167,69,0.1); padding: 8px; margin-bottom: 5px; border-radius: 5px; font-size: 13px; border-left: 3px solid #28a745;">
+                            👍 <b>${item.email}</b> оценил: <i style="color:#bbb;">"${item.text}"</i>
+                        </div>`;
+                } else {
+                    if (freeDislikesShown < 1) { // 1 бесплатный дизлайк
+                        freeDislikesShown++;
+                        return `
+                            <div style="background: rgba(220,53,69,0.1); padding: 8px; margin-bottom: 5px; border-radius: 5px; font-size: 13px; border-left: 3px solid #dc3545;">
+                                👎 <b>${item.email}</b> не оценил: <i style="color:#bbb;">"${item.text}"</i>
+                                <div style="font-size: 10px; color: #ffc107; margin-top: 3px;">(Демо-просмотр: 1 из 1)</div>
+                            </div>`;
+                    } else { // Остальные скрываем
+                        return `
+                            <div style="background: rgba(0,0,0,0.3); padding: 8px; margin-bottom: 5px; border-radius: 5px; font-size: 13px; border-left: 3px solid #777;">
+                                🔒 <b>Скрытый аккаунт</b> поставил дизлайк.
+                                <br><a href="#" onclick="alert('Просмотр всех дизлайков — платная услуга! Раздел в разработке.'); return false;" style="color:#ffc107; font-size:11px; text-decoration:none;">💰 Открыть (Платная услуга)</a>
+                            </div>`;
+                    }
+                }
+            }).join('') || '<p style="text-align:center; color:#777; font-size: 14px;">Истории пока нет.</p>';
+
+            // Заворачиваем историю в скроллируемый контейнер
+            const historyContainer = `
+                <div style="max-height: 250px; overflow-y: auto; padding-right: 5px;" class="custom-scrollbar">
+                    ${historyHtml}
+                </div>
+            `;
+            // 👆 КОНЕЦ ИСТОРИИ
+
+            const renderGalleryItem = (t) => { 
+                let src = t.imageBase64 ? `data:${t.mimetype || 'image/jpeg'};base64,${t.imageBase64}` : `/uploads/${t.fileName}`;
+                const content = `<img src="${src}" alt="${t.originalName}" loading="lazy">`;
 
                 let statusHtml = ''; 
                 if (t.amount && t.amount.trim() !== '') statusHtml = `<div class="status-label status-amount">${t.amount}</div>`;
@@ -179,8 +208,8 @@ export default (db) => {
                 else statusHtml = `<div class="status-label status-busy">Временно занята</div>`;
                 
                 return `
-                    <div class="gallery-wrapper" onclick="openModal('${t._id}', '${t.userId}', this.querySelector('img') ? this.querySelector('img').src : '${src}', '${t.originalName}')">
-                        <div class="gallery-item ${borderClass}" title="Нажмите, чтобы открыть">
+                    <div class="gallery-wrapper" onclick="openModal('${t._id}', '${t.userId}', this.querySelector('img').src, '${t.originalName}')">
+                        <div class="gallery-item work-border" title="Нажмите, чтобы открыть">
                             ${content}
                         </div>
                         ${statusHtml}
@@ -188,11 +217,9 @@ export default (db) => {
                 `;
             }; 
 
-            let tasksHtml = `<div class="gallery-grid">` + pageData.tasks.map(t => renderGalleryItem(t, false)).join('') + `</div>`;
-            let completedHtml = `<div class="gallery-grid">` + pageData.readyDocs.map(d => renderGalleryItem(d, true)).join('') + `</div>`;
+            let tasksHtml = `<div class="gallery-grid">` + pageData.tasks.map(t => renderGalleryItem(t)).join('') + `</div>`;
 
-            // 👇 ЛОГИКА ОТОБРАЖЕНИЯ БЛОКА ВХОДА (Если вошел - показываем профиль)
-            let authBlockHtml = '';
+            let authBlockHtml = ''; 
             if (currentUser) {
                 authBlockHtml = `
                     <h3 style="margin-top:0;">Привет, <span style="color:#28a745;">${currentUser.name}</span>!</h3>
@@ -282,8 +309,7 @@ export default (db) => {
                         .gallery-item { width: 85px; height: 85px; display: flex; justify-content: center; align-items: center; overflow: hidden; border-radius: 5px; background: rgba(255,255,255,0.1); }
                         .gallery-item img { width: 100%; height: 100%; object-fit: cover; }
                       .work-border { border: 2px solid orange; }
-                        .ready-border { border: 2px solid #28a745; }
-                      .status-label { font-size: 10px; text-align: center; margin-top: 4px; font-weight: bold; width: 100%; word-break: break-word; line-height: 1.2;}
+                       .status-label { font-size: 10px; text-align: center; margin-top: 4px; font-weight: bold; width: 100%; word-break: break-word; line-height: 1.2;}
                         .status-free { color: #28a745; } 
                         .status-company { color: #ffc107; } 
                         .status-busy { color: #ccc; font-style: italic; } 
@@ -311,6 +337,12 @@ export default (db) => {
                         .chess-btn { background-color: #6f42c1; } .foot-btn { background-color: #fd7e14; } .dance-btn { background-color: #e83e8c; }
                         .evening-link { display: block; margin-top: 30px; font-size: 1.3em; color: #d4af37; text-decoration: none; border: 2px solid #d4af37; padding: 10px 20px; border-radius: 10px; transition: 0.3s; background: rgba(0,0,0,0.5); text-align: center;}
                         
+                        /* Стили для скроллбара внутри истории */
+                        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+                        .custom-scrollbar::-webkit-scrollbar-track { background: rgba(255,255,255,0.1); border-radius: 5px; }
+                        .custom-scrollbar::-webkit-scrollbar-thumb { background: #888; border-radius: 5px; }
+                        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #555; }
+
                         @media (max-width: 600px) {
                             .page-section { padding-top: 20px; display: block; height: auto; min-height: 100dvh; }
                             .main-wrapper { flex-direction: column; align-items: center; padding-bottom: 60px; }
@@ -363,9 +395,10 @@ export default (db) => {
                                 <h3>🍹 Коктейль (Галерея)</h3>
                                 ${tasksHtml || "<p>Нет загрузок</p>"}
                             </div>
+
                             <div class="block">
-                                <h3>Выполнено (Галерея)</h3>
-                                ${completedHtml || "<p>Нет задач</p>"}
+                                <h3>📜 История оценок</h3>
+                                ${historyContainer}
                             </div>
                       </div>
                         <div class="scroll-hint">⬇</div>
@@ -431,7 +464,7 @@ export default (db) => {
                             }
                         }
 
-                        async function voteComment(commentId, type) { 
+                        async function voteComment(commentId, type) {
                             const res = await fetch('/vote-comment', {
                                 method: 'POST',
                                 headers: { 
@@ -450,6 +483,8 @@ export default (db) => {
                                 const data = await res.json();
                                 document.getElementById('likes-' + commentId).innerHTML = '<b>' + data.likes + '</b>';
                                 document.getElementById('dislikes-' + commentId).innerHTML = '<b>' + data.dislikes + '</b>';
+                                // Обновляем страницу, чтобы в истории тоже отобразился голос
+                                location.reload();
                             } else {
                                 alert('Произошла ошибка при голосовании.');
                             }
