@@ -99,12 +99,34 @@ export default (db) => {
         }
     });
 
+    // 👇 НОВЫЙ МАРШРУТ: Добавление ресторана со скидкой
+    router.post('/add-restaurant', async (req, res) => {
+        if (!req.session || !req.session.user) {
+            return res.status(401).send('Нужна авторизация');
+        }
+        try {
+            await db.collection('restaurants').insertOne({
+                name: req.body.name,
+                discount: req.body.discount,
+                description: req.body.description,
+                contact: req.body.contact,
+                addedBy: req.session.user.email,
+                createdAt: new Date()
+            });
+            await clearCache(LOGIN_PAGE_CACHE_KEY);
+            res.redirect('/');
+        } catch (e) {
+            console.error(e);
+            res.status(500).send("Ошибка при добавлении ресторана");
+        }
+    });
+
     // 2. ГЛАВНАЯ СТРАНИЦА
     router.get(["/", "/login"], async (req, res) => { 
         try {
             res.set('Cache-Control', 'public, max-age=0, must-revalidate'); 
             
-             const currentUser = req.session && req.session.user ? req.session.user : null;
+            const currentUser = req.session && req.session.user ? req.session.user : null;
             
             let activityCounts = {};
             try {
@@ -115,11 +137,12 @@ export default (db) => {
 
             let pageData = await getCache(LOGIN_PAGE_CACHE_KEY); 
             
-            if (!pageData) {
+            // Добавили проверку на pageData.restaurants, чтобы кэш обновился с новыми данными
+            if (!pageData || !pageData.restaurants) {
                 const comments = await db.collection("comments").find().sort({ createdAt: -1 }).toArray(); 
                 const tasks = await db.collection('tasks').find().sort({ createdAt: -1 }).toArray(); 
-                // Убрали загрузку готовых документов, так как мы заменили блок
-                pageData = { comments, tasks }; 
+                const restaurants = await db.collection('restaurants').find().sort({ createdAt: -1 }).toArray(); 
+                pageData = { comments, tasks, restaurants }; 
                 await setCache(LOGIN_PAGE_CACHE_KEY, pageData); 
             }
 
@@ -131,7 +154,7 @@ export default (db) => {
             pageData.hikingCount = activityCounts["Походы"] || 0;
             pageData.travelCount = activityCounts["Путешествие"] || 0;
  
-            // Рендер комментариев на стене
+            // Рендер комментариев
             let commentsHtml = pageData.comments.map(c => {
                 const likesCount = c.likes ? c.likes.length : 0;
                 const dislikesCount = c.dislikes ? c.dislikes.length : 0;
@@ -149,7 +172,7 @@ export default (db) => {
                 </div>`;
             }).join('');
 
-            // 👇 НОВОЕ: ФОРМИРУЕМ ИСТОРИЮ ЛАЙКОВ/ДИЗЛАЙКОВ
+            // История оценок
             let historyItems = [];
             pageData.comments.forEach(c => {
                 const shortText = c.text.length > 25 ? c.text.substring(0, 25) + '...' : c.text;
@@ -160,8 +183,7 @@ export default (db) => {
                     c.dislikes.forEach(email => historyItems.push({ type: 'dislike', email, text: shortText, date: c.createdAt }));
                 }
             });
-
-            // Сортируем (свежие выше)
+ 
             historyItems.sort((a, b) => new Date(b.date) - new Date(a.date));
 
             let freeDislikesShown = 0;
@@ -172,14 +194,14 @@ export default (db) => {
                             👍 <b>${item.email}</b> оценил: <i style="color:#bbb;">"${item.text}"</i>
                         </div>`;
                 } else {
-                    if (freeDislikesShown < 1) { // 1 бесплатный дизлайк
+                    if (freeDislikesShown < 1) { 
                         freeDislikesShown++;
                         return `
                             <div style="background: rgba(220,53,69,0.1); padding: 8px; margin-bottom: 5px; border-radius: 5px; font-size: 13px; border-left: 3px solid #dc3545;">
                                 👎 <b>${item.email}</b> не оценил: <i style="color:#bbb;">"${item.text}"</i>
                                 <div style="font-size: 10px; color: #ffc107; margin-top: 3px;">(Демо-просмотр: 1 из 1)</div>
                             </div>`;
-                    } else { // Остальные скрываем
+                    } else { 
                         return `
                             <div style="background: rgba(0,0,0,0.3); padding: 8px; margin-bottom: 5px; border-radius: 5px; font-size: 13px; border-left: 3px solid #777;">
                                 🔒 <b>Скрытый аккаунт</b> поставил дизлайк.
@@ -189,13 +211,29 @@ export default (db) => {
                 }
             }).join('') || '<p style="text-align:center; color:#777; font-size: 14px;">Истории пока нет.</p>';
 
-            // Заворачиваем историю в скроллируемый контейнер
-            const historyContainer = `
+            const historyContainer = ` 
                 <div style="max-height: 250px; overflow-y: auto; padding-right: 5px;" class="custom-scrollbar">
                     ${historyHtml}
                 </div>
             `;
-            // 👆 КОНЕЦ ИСТОРИИ
+
+            // 👇 Рендер блока ресторанов
+            let restaurantsHtml = (pageData.restaurants || []).map(r => `
+                <div style="background: rgba(255,152,0,0.1); padding: 12px; margin-bottom: 10px; border-radius: 5px; border-left: 4px solid #ff9800;">
+                    <div style="font-size: 15px; margin-bottom: 5px; display: flex; justify-content: space-between;">
+                        <b>${r.name}</b> 
+                        <span style="color:#ff9800; font-weight:bold; background:rgba(255,152,0,0.2); padding:2px 6px; border-radius:4px; font-size:12px;">${r.discount}</span>
+                    </div>
+                    <div style="font-size: 13px; color: #ccc; margin-bottom: 8px;">${r.description}</div>
+                    <div style="font-size: 12px; color: #aaa;">📞 Бронь: <span style="color:white;">${r.contact}</span></div>
+                </div>
+            `).join('') || '<p style="text-align:center; color:#777; font-size: 14px;">Пока нет предложений.</p>';
+
+            const restaurantsContainer = `
+                <div style="max-height: 250px; overflow-y: auto; padding-right: 5px;" class="custom-scrollbar">
+                    ${restaurantsHtml}
+                </div>
+            `;
 
             const renderGalleryItem = (t) => { 
                 let src = t.imageBase64 ? `data:${t.mimetype || 'image/jpeg'};base64,${t.imageBase64}` : `/uploads/${t.fileName}`;
@@ -219,7 +257,7 @@ export default (db) => {
 
             let tasksHtml = `<div class="gallery-grid">` + pageData.tasks.map(t => renderGalleryItem(t)).join('') + `</div>`;
 
-            let authBlockHtml = ''; 
+            let authBlockHtml = '';
             if (currentUser) {
                 authBlockHtml = `
                     <h3 style="margin-top:0;">Привет, <span style="color:#28a745;">${currentUser.name}</span>!</h3>
@@ -309,7 +347,7 @@ export default (db) => {
                         .gallery-item { width: 85px; height: 85px; display: flex; justify-content: center; align-items: center; overflow: hidden; border-radius: 5px; background: rgba(255,255,255,0.1); }
                         .gallery-item img { width: 100%; height: 100%; object-fit: cover; }
                       .work-border { border: 2px solid orange; }
-                       .status-label { font-size: 10px; text-align: center; margin-top: 4px; font-weight: bold; width: 100%; word-break: break-word; line-height: 1.2;}
+                      .status-label { font-size: 10px; text-align: center; margin-top: 4px; font-weight: bold; width: 100%; word-break: break-word; line-height: 1.2;}
                         .status-free { color: #28a745; } 
                         .status-company { color: #ffc107; } 
                         .status-busy { color: #ccc; font-style: italic; } 
@@ -337,7 +375,7 @@ export default (db) => {
                         .chess-btn { background-color: #6f42c1; } .foot-btn { background-color: #fd7e14; } .dance-btn { background-color: #e83e8c; }
                         .evening-link { display: block; margin-top: 30px; font-size: 1.3em; color: #d4af37; text-decoration: none; border: 2px solid #d4af37; padding: 10px 20px; border-radius: 10px; transition: 0.3s; background: rgba(0,0,0,0.5); text-align: center;}
                         
-                        /* Стили для скроллбара внутри истории */
+                        /* Стили для скроллбара внутри истории и ресторанов */
                         .custom-scrollbar::-webkit-scrollbar { width: 6px; }
                         .custom-scrollbar::-webkit-scrollbar-track { background: rgba(255,255,255,0.1); border-radius: 5px; }
                         .custom-scrollbar::-webkit-scrollbar-thumb { background: #888; border-radius: 5px; }
@@ -357,7 +395,7 @@ export default (db) => {
                 <body>
                     <div id="photoModal" class="modal-overlay">
                         <div class="modal">
-                            <span class="close-modal" onclick="closeModal()">&times;</span>
+                            <span class="close-modal" onclick="closeModal('photoModal')">&times;</span>
                             <h3 id="modalTitle" style="margin-top:0; color:black;">Фото</h3>
                             <img id="modalImg" src="">
                             
@@ -373,6 +411,30 @@ export default (db) => {
                                 <textarea id="messageText" placeholder="Привет! Я насчет этого фото..."></textarea>
                                 <button onclick="sendMessage()" style="background:#007BFF">Отправить владельцу</button>
                             </div>
+                        </div>
+                    </div>
+
+                    <div id="restaurantModal" class="modal-overlay">
+                        <div class="modal">
+                            <span class="close-modal" onclick="closeModal('restaurantModal')">&times;</span>
+                            <h3 style="margin-top:0; color:black;">Предложить ресторан</h3>
+                            <form action="/add-restaurant" method="POST" style="text-align:left;">
+                                <input type="hidden" name="_csrf" value="${res.locals.csrfToken}">
+                                
+                                <label style="color:black; font-weight:bold; font-size:14px;">Название заведения:</label>
+                                <input type="text" name="name" required placeholder="Например: Мята Lounge" style="border:1px solid #ccc; color:black;">
+                                
+                                <label style="color:black; font-weight:bold; font-size:14px;">Скидка / Акция:</label>
+                                <input type="text" name="discount" required placeholder="Например: Скидка 20% на бар" style="border:1px solid #ccc; color:black;">
+                                
+                                <label style="color:black; font-weight:bold; font-size:14px;">Описание (коротко):</label>
+                                <textarea name="description" required placeholder="Уютная атмосфера, живая музыка..." style="width: 100%; height: 60px; margin-bottom: 10px; padding: 8px; box-sizing: border-box; border: 1px solid #ccc; font-size: 14px;"></textarea>
+                                
+                                <label style="color:black; font-weight:bold; font-size:14px;">Ваш контакт (бронь):</label>
+                                <input type="text" name="contact" required placeholder="Телефон или Telegram" value="${currentUser ? (currentUser.phone || currentUser.email) : ''}" style="border:1px solid #ccc; color:black;">
+                                
+                                <button type="submit" style="background:#ff9800; margin-top:10px;">Опубликовать предложение</button>
+                            </form>
                         </div>
                     </div>
 
@@ -400,6 +462,17 @@ export default (db) => {
                                 <h3>📜 История оценок</h3>
                                 ${historyContainer}
                             </div>
+
+                            <div class="block">
+                                <h3 style="color:#ff9800;">🍽️ Рестораны со скидкой</h3>
+                                ${restaurantsContainer}
+                                ${currentUser ? 
+                                    `<button onclick="document.getElementById('restaurantModal').style.display='flex'" style="background:#ff9800; margin-top:15px; font-size:15px;">+ Предложить свой</button>` 
+                                    : 
+                                    `<p style="font-size:13px; color:#aaa; text-align:center; margin-top:15px;">Войдите, чтобы предложить ресторан</p>`
+                                }
+                            </div>
+
                       </div>
                         <div class="scroll-hint">⬇</div>
                     </div>
@@ -435,8 +508,9 @@ export default (db) => {
                             currentImageId = id;
                         }
 
-                        function closeModal() {
-                            document.getElementById('photoModal').style.display = 'none';
+                        // Обновленная функция закрытия модалок
+                        function closeModal(modalId) {
+                            document.getElementById(modalId).style.display = 'none';
                         }
 
                         function showChatForm() {
@@ -457,7 +531,7 @@ export default (db) => {
                             
                             if(res.ok) {
                                 alert('Сообщение отправлено владельцу в кабинет и опубликовано на главной!');
-                                closeModal();
+                                closeModal('photoModal');
                                 location.reload();
                             } else {
                                 alert('Ошибка отправки. Попробуйте позже.');
@@ -483,16 +557,19 @@ export default (db) => {
                                 const data = await res.json();
                                 document.getElementById('likes-' + commentId).innerHTML = '<b>' + data.likes + '</b>';
                                 document.getElementById('dislikes-' + commentId).innerHTML = '<b>' + data.dislikes + '</b>';
-                                // Обновляем страницу, чтобы в истории тоже отобразился голос
-                                location.reload();
+                                location.reload(); 
                             } else {
                                 alert('Произошла ошибка при голосовании.');
                             }
                         }
 
-                        document.getElementById('photoModal').addEventListener('click', function(e) {
-                            if (e.target === this) closeModal();
-                        });
+                        // Закрытие по клику вне окна
+                        window.onclick = function(event) {
+                            const photoModal = document.getElementById('photoModal');
+                            const restModal = document.getElementById('restaurantModal');
+                            if (event.target == photoModal) closeModal('photoModal');
+                            if (event.target == restModal) closeModal('restaurantModal');
+                        }
                     </script>
                 </body>
                 </html>
