@@ -1,7 +1,5 @@
 import express from 'express';
-import { ObjectId } from "mongodb";
-import { clearCache, LOGIN_PAGE_CACHE_KEY } from '../cacheService.js';
-// 👇 1. ПОДКЛЮЧАЕМ НАШ НОВЫЙ СЕРВИС
+import { ObjectId } from "mongodb"; 
 import { addUserActivity, removeUserActivity } from '../services/activityService.js';
 
 const requireLogin = (req, res, next) => {
@@ -13,7 +11,7 @@ export default (db) => {
     const router = express.Router();
 
     // ------------------------------------------
-    // 1. СПИСОК ВСЕХ АКТИВНОСТЕЙ (Главная страница раздела)
+    // 1. СПИСОК ВСЕХ АКТИВНОСТЕЙ
     // ------------------------------------------
     router.get("/", requireLogin, async (req, res) => {
         try {
@@ -23,41 +21,25 @@ export default (db) => {
             const currentUser = await db.collection("users").findOne({ _id: ObjectId.createFromHexString(req.session.user._id) });
             const userActivities = currentUser ? (currentUser.activities || []) : [];
             
-            // 👇 Вспомогательная функция: проверяет, есть ли активность у юзера (и как строка, и как объект)
-            const hasActivity = (list, name) => {
-                return list.some(a => a === name || (a && a.name === name));
-            };
+            const hasActivity = (list, name) => list.some(a => a === name || (a && a.name === name));
+            const countUsers = (name) => users.filter(u => u.activities && hasActivity(u.activities, name)).length;
 
-            // 👇 Вспомогательная функция: считает количество (учитывая и строки, и объекты)
-            const countUsers = (name) => {
-                return users.filter(u => u.activities && hasActivity(u.activities, name)).length;
-            };
-
-            // Считаем участников (обновленная логика)
             const counts = {
-                chess: countUsers("Шахматы"),
-                football: countUsers("Футбол"),
-                dance: countUsers("Танцы"),
-                hockey: countUsers("Хоккей"),
-                volley: countUsers("Волейбол"),
-                hiking: countUsers("Походы"),
+                chess: countUsers("Шахматы"), football: countUsers("Футбол"), dance: countUsers("Танцы"),
+                hockey: countUsers("Хоккей"), volley: countUsers("Волейбол"), hiking: countUsers("Походы"),
                 travel: countUsers("Путешествие")
             };
             
             const renderCard = (name, count, label) => {
                 const isJoined = hasActivity(userActivities, name);
-                
-                // 👇 ЛОГИКА ОТОБРАЖЕНИЯ:
-                // Если записан -> кнопка "Отписаться"
-                // Если НЕТ -> Поле для лимита + кнопка "Записаться"
-                
+                 
                 let actionHtml = '';
                 if (isJoined) {
                     actionHtml = `<button type="submit" name="action" value="leave" class="btn btn-leave">Отписаться</button>`;
                 } else {
                     actionHtml = `
-                        <div style="margin-bottom: 5px; font-size: 0.9em; color: #555;">
-                            <label>Хочу до: <input type="number" name="limit" placeholder="∞" style="width: 50px; padding: 3px; border: 1px solid #ccc; border-radius: 3px;"> чел.</label>
+                        <div class="limit-box">
+                            <label>Хочу до: <input type="number" name="limit" placeholder="∞"></label> чел.
                         </div>
                         <button type="submit" name="action" value="join" class="btn btn-join">Записаться</button>
                     `;
@@ -66,10 +48,10 @@ export default (db) => {
                 return `
                 <div class="activity-card">
                     <div class="activity-header">
-                        <a href="/activities/${name}" style="color:#333; text-decoration:none;">${label || name}</a>
-                        <span>Уч: ${count}</span>
+                        <a href="/activities/${name}" class="activity-title">${label || name}</a>
+                        <span class="activity-count">Уч: ${count}</span>
                     </div>
-                    <form action="/activities/update" method="POST" style="display:inline;">
+                    <form action="/activities/update" method="POST" class="activity-form">
                         <input type="hidden" name="_csrf" value="${res.locals.csrfToken}">
                         <input type="hidden" name="activity" value="${name}">
                         ${actionHtml}
@@ -79,16 +61,35 @@ export default (db) => {
 
             res.send(` 
                 <!DOCTYPE html><html lang="ru"><head><meta charset="UTF-8"><title>Активности</title>
+                <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
                 <style>
-                    body { font-family: Arial, sans-serif; padding: 20px; background-color: #f0f0f0; margin: 0; }
-                    .tab-container { max-width: 600px; margin: 20px auto; }
-                    .activity-card { padding: 15px; background-color: white; border: 1px solid #ddd; margin-bottom: 10px; border-radius: 8px; }
-                    .activity-header { display: flex; justify-content: space-between; align-items: center; font-size: 1.2em; font-weight: bold; margin-bottom: 10px; }
-                    .btn { padding: 8px 12px; border: none; border-radius: 5px; color: white; cursor: pointer; text-decoration: none; font-size: 1em;}
-                    .btn-join { background-color: #28a745; } .btn-leave { background-color: #dc3545; }
-                    a.back-link { color: #007BFF; text-decoration: none; font-weight: bold; display:block; text-align:center; margin-top:20px; }
-                    h3 { margin-top: 30px; border-bottom: 2px solid #ccc; padding-bottom: 5px; }
-                    input[type=number]::-webkit-inner-spin-button { opacity: 1; }
+                    body { font-family: Arial, sans-serif; padding: 10px; background-color: #f4f6f9; margin: 0; color: #333; }
+                    .tab-container { width: 100%; max-width: 600px; margin: 0 auto; padding-bottom: 30px; box-sizing: border-box; }
+                    h2 { text-align: center; margin-top: 10px; }
+                    h3 { margin-top: 25px; border-bottom: 2px solid #ddd; padding-bottom: 8px; color: #555; }
+                    
+                    .activity-card { padding: 20px; background-color: white; border: 1px solid #e1e4e8; margin-bottom: 15px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+                    .activity-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+                    .activity-title { color:#007BFF; text-decoration:none; font-size: 1.3em; font-weight: bold; }
+                    .activity-count { background: #eee; padding: 5px 10px; border-radius: 20px; font-weight: bold; color: #555; }
+                    
+                    .limit-box { margin-bottom: 15px; font-size: 1em; color: #555; }
+                    .limit-box input { width: 70px; padding: 10px; border: 1px solid #ccc; border-radius: 5px; font-size: 16px; margin-left: 5px; text-align: center; }
+                    
+                    .btn { padding: 12px 20px; border: none; border-radius: 8px; color: white; cursor: pointer; font-size: 16px; font-weight: bold; width: 100%; box-sizing: border-box; transition: 0.2s;}
+                    .btn-join { background-color: #28a745; } .btn-join:hover { background-color: #218838; }
+                    .btn-leave { background-color: #dc3545; } .btn-leave:hover { background-color: #c82333; }
+                    
+                    a.back-link { display: block; background: #6c757d; color: white; text-align: center; padding: 15px; margin-top: 30px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px;}
+                    
+                    /* МОБИЛЬНАЯ АДАПТАЦИЯ */
+                    @media (max-width: 600px) {
+                        .activity-card { padding: 15px; }
+                        .activity-header { flex-direction: column; align-items: flex-start; gap: 10px; }
+                        .activity-title { font-size: 1.4em; }
+                        .limit-box { display: flex; align-items: center; justify-content: space-between; background: #f9f9f9; padding: 10px; border-radius: 5px; }
+                        .btn { padding: 15px; font-size: 18px; }
+                    }
                 </style></head><body>
                 <div class="tab-container">
                     <h2>Доступные активности</h2>
@@ -106,27 +107,22 @@ export default (db) => {
                     <h3>Для души</h3>
                     ${renderCard("Путешествие", counts.travel, "✈️ Путешествие с тобой")}
                     
-                    <a href="/profile" class="back-link">Вернуться в профиль</a>
+                    <a href="/profile" class="back-link">⬅ Вернуться в профиль</a>
                 </div></body></html>
             `);
         } catch(error) { console.error(error); res.status(500).send("Ошибка."); }
     });
 
     // ------------------------------------------
-    // 2. ОБНОВЛЕНИЕ ПОДПИСКИ (Записаться/Отписаться) - ЧЕРЕЗ СЕРВИС
+    // 2. ОБНОВЛЕНИЕ ПОДПИСКИ
     // ------------------------------------------
     router.post("/update", requireLogin, async (req, res) => {
         try {
-            const { activity, action, limit } = req.body; // Получаем limit из формы
+            const { activity, action, limit } = req.body; 
             const uid = req.session.user._id;
             
-            if(action === "join") {
-                // 👇 Используем функцию добавления из сервиса
-                await addUserActivity(db, uid, activity, limit);
-            } else {
-                // 👇 Используем функцию удаления из сервиса
-                await removeUserActivity(db, uid, activity);
-            }
+            if(action === "join") await addUserActivity(db, uid, activity, limit);
+            else await removeUserActivity(db, uid, activity);
             
             res.redirect("/activities");
         } catch (e) {
@@ -136,70 +132,83 @@ export default (db) => {
     });
 
     // ------------------------------------------
-    // 3. ПРОСМОТР УЧАСТНИКОВ (ИСПРАВЛЕННАЯ БЕЗОПАСНАЯ ВЕРСИЯ)
+    // 3. ПРОСМОТР УЧАСТНИКОВ (С МОБИЛЬНОЙ АДАПТАЦИЕЙ)
     // ------------------------------------------
     router.get('/:activityName', async (req, res) => {
         try {
             const activityName = req.params.activityName;
             
-            // 🛡️ ЗАЩИТА ОТ БОТОВ: Игнорируем системные файлы
-            if (['favicon.ico', 'update', 'css', 'js', 'sitemap.xml'].includes(activityName)) {
-                return res.status(404).send('Not found');
-            }
+            if (['favicon.ico', 'update', 'css', 'js', 'sitemap.xml'].includes(activityName)) return res.status(404).send('Not found');
 
-            // 🛡️ ЗАЩИТА ОТ ОШИБКИ CSRF (для ботов)
-            const safeCsrf = res.locals.csrfToken || '';
+            const safeCsrf = res.locals.csrfToken || ''; 
 
-            // 👇 ОБНОВЛЕННЫЙ ПОИСК (Твой код сохранен): Ищем и строки "Футбол", и объекты { name: "Футбол" }
-            const participants = await db.collection('users').find({
+            const participants = await db.collection('users').find({ 
                 $or: [
-                    { activities: activityName },       // Старый формат (строка)
-                    { "activities.name": activityName } // Новый формат (объект)
+                    { activities: activityName },
+                    { "activities.name": activityName }
                 ]
             }).toArray();
             
             let html = participants.map(p => { 
                 let limitInfo = "";
                 
-                // 🛡️ ГЛАВНОЕ ИСПРАВЛЕНИЕ ЗДЕСЬ:
-                // Добавлена проверка (typeof a === 'object'), чтобы сервер не падал, если в базе старые данные или null
-                if (Array.isArray(p.activities)) {
+                if (Array.isArray(p.activities)) { 
                     const actObj = p.activities.find(a => a && typeof a === 'object' && a.name === activityName);
                     if (actObj && actObj.limit) {
-                        limitInfo = `<span style="color:#d4af37; font-weight:bold; font-size:0.9em;">(Ищет до ${actObj.limit} чел.)</span>`;
+                        limitInfo = `<span style="color:#d4af37; font-weight:bold; font-size:0.9em; background:#333; padding:2px 8px; border-radius:10px;">(Ищет до ${actObj.limit} чел.)</span>`;
                     }
                 }
 
                 return `
                 <div class="card">
-                    <div style="font-weight:bold; font-size:1.2em; margin-bottom:5px;">
+                    <div class="card-title">
                         ${p.name || 'Пользователь'} ${limitInfo}
                     </div>
-                    <div style="color:#666;">📞 ${p.phone || 'Нет'} | 🌍 ${p.city || ''}</div>
-                    <div style="margin-bottom:10px;">📅 ${(p.availability?.days||[]).join(', ')} | ⏰ ${p.availability?.time || ''}</div>
+                    <div class="card-info">📞 ${p.phone || 'Нет'} | 🌍 ${p.city || ''}</div>
+                    <div class="card-info" style="margin-bottom:15px;">📅 ${(p.availability?.days||[]).join(', ')} | ⏰ ${p.availability?.time || ''}</div>
                     
-                    <form onsubmit="sendActivityMessage(event, '${p._id}')" style="background:#f9f9f9; padding:10px; border-radius:5px;">
-                        <input type="text" name="contact" placeholder="Ваш контакт" required style="width:100%; margin-bottom:5px; padding:5px;">
-                        <textarea name="text" placeholder="Сообщение..." required style="width:100%; height:50px; padding:5px;"></textarea>
-                        <button type="submit" style="width:100%; padding:5px; background:#007BFF; color:white; border:none; cursor:pointer;">Написать ${p.name || ''}</button>
+                    <form onsubmit="sendActivityMessage(event, '${p._id}')" class="msg-form">
+                        <input type="text" name="contact" placeholder="Ваш контакт" required>
+                        <textarea name="text" placeholder="Сообщение..." required></textarea>
+                        <button type="submit">Написать ${p.name || ''}</button>
                     </form>
                 </div>`;
-            }).join('') || '<p>Пока никого нет.</p>';
+            }).join('') || '<p style="text-align:center; color:#777; font-size:18px; margin-top:30px;">Пока никого нет.</p>';
                 
             res.send(`
                 <!DOCTYPE html><html><head><meta charset="UTF-8"><title>${activityName}</title>
+                <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
                 <style>
-                    body{font-family:Arial;padding:20px;background:#eee;max-width:800px;margin:auto}
-                    .card{background:white;padding:15px;margin-bottom:15px;border-radius:5px;box-shadow:0 2px 5px rgba(0,0,0,0.1)}
-                    a{display:block;text-align:center;margin-top:20px;padding:10px;background:#6c757d;color:white;text-decoration:none;border-radius:5px}
+                    body{font-family:Arial,sans-serif;padding:15px;background:#eee;max-width:800px;margin:auto;}
+                    h1{text-align:center; color:#333; margin-bottom:20px;}
+                    .card{background:white;padding:20px;margin-bottom:20px;border-radius:10px;box-shadow:0 3px 10px rgba(0,0,0,0.1)}
+                    .card-title{font-weight:bold; font-size:1.3em; margin-bottom:10px; display:flex; flex-wrap:wrap; gap:10px; align-items:center;}
+                    .card-info{color:#555; font-size:1.1em; margin-bottom:5px;}
+                    
+                    .msg-form{background:#f9f9f9; padding:15px; border-radius:8px; border:1px solid #ddd;}
+                    .msg-form input, .msg-form textarea{width:100%; margin-bottom:10px; padding:12px; box-sizing:border-box; border:1px solid #ccc; border-radius:5px; font-size:16px;}
+                    .msg-form textarea{height:80px; resize:vertical;}
+                    .msg-form button{width:100%; padding:15px; background:#007BFF; color:white; border:none; cursor:pointer; border-radius:5px; font-size:16px; font-weight:bold;}
+                    
+                    a.back-btn{display:block;text-align:center;margin-top:30px;padding:15px;background:#6c757d;color:white;text-decoration:none;border-radius:8px; font-weight:bold; font-size:16px;}
+                    
+                    @media (max-width: 600px) {
+                        body { padding: 10px; }
+                        .card { padding: 15px; }
+                        .card-title { font-size: 1.2em; flex-direction: column; align-items: flex-start; gap: 5px; }
+                    }
                 </style></head><body>
-                <h1 style="text-align:center">${activityName}</h1>
+                <h1>${activityName}</h1>
                 ${html}
-                <a href="/activities">Назад к списку</a>
+                <a href="/activities" class="back-btn">⬅ Назад к списку</a>
                 
                 <script>
                     async function sendActivityMessage(e,t){
                         e.preventDefault();
+                        const btn = e.target.querySelector('button');
+                        btn.disabled = true;
+                        btn.innerText = 'Отправка...';
+                        
                         const c=e.target.contact.value;
                         const x=e.target.text.value;
                         
@@ -209,6 +218,9 @@ export default (db) => {
                             body:JSON.stringify({toUserId:t,contactInfo:c,messageText:x,source:'${activityName}'})
                         });
                         
+                        btn.disabled = false;
+                        btn.innerText = 'Написать еще раз';
+                        
                         if(r.ok) { alert('Отправлено! Ответ придет в Ваш профиль.'); e.target.text.value=''; }
                         else { alert('Ошибка отправки.'); }
                     }
@@ -216,7 +228,7 @@ export default (db) => {
                 </body></html>
             `);
         } catch (error) { 
-            console.error("CRITICAL ERROR IN ROUTE:", error); 
+            console.error(error); 
             res.status(500).send('Ошибка сервера (уже чиним).'); 
         }
     });
