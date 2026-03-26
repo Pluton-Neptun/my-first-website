@@ -1,6 +1,5 @@
 import express from 'express';
-import { ObjectId } from 'mongodb'; 
-// 👇 Добавили clearCache в импорты
+import { ObjectId } from 'mongodb';  
 import { getCache, setCache, clearCache, LOGIN_PAGE_CACHE_KEY } from '../cacheService.js';
 import { checkLimitsAndGetCounts } from '../services/activityService.js';
 
@@ -28,8 +27,7 @@ export default (db) => {
                 return res.status(400).json({ error: 'Не найден получатель' });
             }
 
-            // Отправляем личное сообщение владельцу
-            await db.collection('messages').insertOne({
+            await db.collection('messages').insertOne({ 
                 toUserId: receiverId, 
                 fromContact: contactInfo || "Гость",
                 imageId: imageId ? new ObjectId(imageId) : null, 
@@ -40,15 +38,14 @@ export default (db) => {
                 isRead: false
             });
             
-            // 👇 ДУБЛИРУЕМ на главную стену
-            await db.collection('comments').insertOne({
+            await db.collection('comments').insertOne({ 
                 authorName: contactInfo || "Гость",
                 text: messageText,
                 createdAt: new Date(),
                 likes: [],
                 dislikes: []
             });
-            await clearCache(LOGIN_PAGE_CACHE_KEY); // Сбрасываем кэш, чтобы коммент появился сразу
+            await clearCache(LOGIN_PAGE_CACHE_KEY); 
             
             res.json({ status: 'ok' });
         } catch (error) { 
@@ -57,7 +54,7 @@ export default (db) => {
         }
     });
 
-    // 👇 НОВЫЙ МАРШРУТ: Голосование за комментарий (Лайки / Дизлайки)
+    // Голосование за комментарий
     router.post('/vote-comment', async (req, res) => {
         if (!req.session || !req.session.user) {
             return res.status(401).json({ error: 'Нужна авторизация' });
@@ -102,30 +99,33 @@ export default (db) => {
         }
     });
 
-    // 2. ГЛАВНАЯ СТРАНИЦА (И LOGIN, И ROOT)
-  router.get(["/", "/login"], async (req, res) => { 
+    // 2. ГЛАВНАЯ СТРАНИЦА
+    router.get(["/", "/login"], async (req, res) => { 
         try {
             res.set('Cache-Control', 'public, max-age=0, must-revalidate'); 
             
-          let activityCounts = {};
+            // 👇 ДОСТАЕМ ТЕКУЩЕГО ПОЛЬЗОВАТЕЛЯ ИЗ СЕССИИ
+            const currentUser = req.session && req.session.user ? req.session.user : null;
+            
+            let activityCounts = {};
             try {
                  activityCounts = await checkLimitsAndGetCounts(db);
             } catch (err) {
                  console.error("Ошибка подсчета активностей:", err);
             }
 
-         let pageData = await getCache(LOGIN_PAGE_CACHE_KEY); 
+            let pageData = await getCache(LOGIN_PAGE_CACHE_KEY); 
             
             if (!pageData) {
-            const comments = await db.collection("comments").find().sort({ createdAt: -1 }).toArray(); 
+                const comments = await db.collection("comments").find().sort({ createdAt: -1 }).toArray(); 
                 const tasks = await db.collection('tasks').find().sort({ createdAt: -1 }).toArray(); 
                 const readyDocs = await db.collection('ready_documents').find().sort({ completedAt: -1 }).toArray(); 
                 
-             pageData = { comments, tasks, readyDocs }; 
-               await setCache(LOGIN_PAGE_CACHE_KEY, pageData); 
+                pageData = { comments, tasks, readyDocs }; 
+                await setCache(LOGIN_PAGE_CACHE_KEY, pageData); 
             }
 
-         pageData.chessCount = activityCounts["Шахматы"] || 0;
+            pageData.chessCount = activityCounts["Шахматы"] || 0;
             pageData.footballCount = activityCounts["Футбол"] || 0;
             pageData.danceCount = activityCounts["Танцы"] || 0;
             pageData.hockeyCount = activityCounts["Хоккей"] || 0;
@@ -133,8 +133,7 @@ export default (db) => {
             pageData.hikingCount = activityCounts["Походы"] || 0;
             pageData.travelCount = activityCounts["Путешествие"] || 0;
  
-            // 👇 ОБНОВЛЕННЫЙ ВЫВОД КОММЕНТАРИЕВ С КНОПКАМИ
-            let commentsHtml = pageData.comments.map(c => {
+            let commentsHtml = pageData.comments.map(c => { 
                 const likesCount = c.likes ? c.likes.length : 0;
                 const dislikesCount = c.dislikes ? c.dislikes.length : 0;
                 return `
@@ -192,18 +191,42 @@ export default (db) => {
             let tasksHtml = `<div class="gallery-grid">` + pageData.tasks.map(t => renderGalleryItem(t, false)).join('') + `</div>`;
             let completedHtml = `<div class="gallery-grid">` + pageData.readyDocs.map(d => renderGalleryItem(d, true)).join('') + `</div>`;
 
+            // 👇 ЛОГИКА ОТОБРАЖЕНИЯ БЛОКА ВХОДА (Если вошел - показываем профиль)
+            let authBlockHtml = '';
+            if (currentUser) {
+                authBlockHtml = `
+                    <h3 style="margin-top:0;">Привет, <span style="color:#28a745;">${currentUser.name}</span>!</h3>
+                    <a href="/profile" style="display:block; background:#28a745; color:white; padding:12px; text-align:center; text-decoration:none; border-radius:5px; font-weight:bold; margin-bottom:10px;">В личный кабинет 👤</a>
+                    <form action="/logout" method="POST" style="margin:0;">
+                        <input type="hidden" name="_csrf" value="${res.locals.csrfToken}">
+                        <button type="submit" style="background:#dc3545; margin:0;">Выйти</button>
+                    </form>
+                `;
+            } else {
+                authBlockHtml = `
+                    <h3 style="margin-top:0;">Вход</h3>
+                    <form action="/login" method="POST" style="margin:0;">
+                        <input type="hidden" name="_csrf" value="${res.locals.csrfToken}">
+                        <input type="email" name="email" placeholder="Email" required>
+                        <input type="password" name="password" placeholder="Пароль" required>
+                        <button type="submit">Войти</button>
+                        <a href="/register" class="link">Нет аккаунта? Регистрация</a>
+                    </form>
+                `;
+            }
+
             res.send(` 
                 <!DOCTYPE html>
                 <html lang="ru">
                 <head>
                     <meta charset="UTF-8">
                     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-                    <title>Вход</title>
+                    <title>Главная стена</title>
                     <link rel="canonical" href="https://mikky.kz/" />
                     <script src="/ga.js"></script>
                     <style>
                      html { scroll-snap-type: y mandatory; }
-                      
+                        
                         body { 
                             font-family: Arial, sans-serif; 
                             background: url('/images/background.jpg') center/cover fixed; 
@@ -212,7 +235,7 @@ export default (db) => {
                             overflow-y: scroll; 
                         }
 
-                     .page-section { 
+                        .page-section { 
                             min-height: 100dvh; 
                             width: 100%; 
                             scroll-snap-align: start; 
@@ -239,7 +262,7 @@ export default (db) => {
                             width: 100%; 
                         }
 
-                     .block { 
+                        .block { 
                             background: rgba(0,0,0,0.7); 
                             color: white; 
                             padding: 20px; 
@@ -278,7 +301,7 @@ export default (db) => {
                         #msg-form { display: none; margin-top: 15px; text-align: left; }
                         #msg-form textarea { width: 100%; height: 80px; margin-bottom: 10px; padding: 8px; box-sizing: border-box; border: 1px solid #ccc; font-size: 16px;}
                         #msg-form input { width: 100%; padding: 10px; margin-bottom: 10px; box-sizing: border-box; border: 1px solid #ccc; font-size: 16px;}
-                    a.link { color: #6cafff; display: block; text-align: center; margin-top: 10px; padding: 10px;}
+                      a.link { color: #6cafff; display: block; text-align: center; margin-top: 10px; padding: 10px;}
                         
                         .new-activities-wrapper { display: flex; gap: 15px; flex-wrap: wrap; justify-content: center; max-width: 800px; width: 100%; }
                         .new-btn { display: inline-block; padding: 12px 25px; background: rgba(255,255,255,0.1); border: 2px solid white; color: white; text-decoration: none; border-radius: 30px; font-size: 1.1em; transition: 0.3s; margin: 5px; }
@@ -288,7 +311,7 @@ export default (db) => {
                         .chess-btn { background-color: #6f42c1; } .foot-btn { background-color: #fd7e14; } .dance-btn { background-color: #e83e8c; }
                         .evening-link { display: block; margin-top: 30px; font-size: 1.3em; color: #d4af37; text-decoration: none; border: 2px solid #d4af37; padding: 10px 20px; border-radius: 10px; transition: 0.3s; background: rgba(0,0,0,0.5); text-align: center;}
                         
-                     @media (max-width: 600px) {
+                        @media (max-width: 600px) {
                             .page-section { padding-top: 20px; display: block; height: auto; min-height: 100dvh; }
                             .main-wrapper { flex-direction: column; align-items: center; padding-bottom: 60px; }
                             .block { width: 95%; max-width: none; } 
@@ -313,7 +336,7 @@ export default (db) => {
 
                             <div id="msg-form">
                                 <label style="color:black; font-weight:bold;">Ваш контакт:</label>
-                                <input type="text" id="contactInfo" placeholder="Email или телефон...">
+                                <input type="text" id="contactInfo" placeholder="Email или телефон..." value="${currentUser ? (currentUser.phone || currentUser.email) : ''}">
                                 <label style="color:black; font-weight:bold;">Сообщение:</label>
                                 <textarea id="messageText" placeholder="Привет! Я насчет этого фото..."></textarea>
                                 <button onclick="sendMessage()" style="background:#007BFF">Отправить владельцу</button>
@@ -324,19 +347,12 @@ export default (db) => {
                     <div class="page-section">
                         <div class="main-wrapper">
                             <div class="block">
-                                <h3>Вход</h3>
-                                <form action="/login" method="POST">
-                                    <input type="hidden" name="_csrf" value="${res.locals.csrfToken}">
-                                    <input type="email" name="email" placeholder="Email" required>
-                                    <input type="password" name="password" placeholder="Пароль" required>
-                                    <button type="submit">Войти</button>
-                                    <a href="/register" class="link">Нет аккаунта? Регистрация</a>
-                                </form>
+                                ${authBlockHtml}
                                 <hr>
                                 <h3>Активности:</h3>
-                                <a href="/activities/Шахматы" target="_blank" class="activity-btn chess-btn">♟️ Шахматы (${pageData.chessCount})</a>
-                                <a href="/activities/Футбол" target="_blank" class="activity-btn foot-btn">⚽ Футбол (${pageData.footballCount})</a>
-                                <a href="/activities/Танцы" target="_blank" class="activity-btn dance-btn">💃 Танцы (${pageData.danceCount})</a>
+                                <a href="/activities/Шахматы" class="activity-btn chess-btn">♟️ Шахматы (${pageData.chessCount})</a>
+                                <a href="/activities/Футбол" class="activity-btn foot-btn">⚽ Футбол (${pageData.footballCount})</a>
+                                <a href="/activities/Танцы" class="activity-btn dance-btn">💃 Танцы (${pageData.danceCount})</a>
                             </div>
                             
                             <div class="block">
@@ -358,13 +374,13 @@ export default (db) => {
                     <div class="page-section second-page">
                         <h2 style="color:white; margin-bottom:30px; text-align:center;">Активный отдых</h2>
                         <div class="new-activities-wrapper">
-                            <a href="/activities/Хоккей" target="_blank" class="new-btn">🏒 Хоккей (${pageData.hockeyCount})</a>
-                            <a href="/activities/Волейбол" target="_blank" class="new-btn">🏐 Волейбол (${pageData.volleyCount})</a>
-                            <a href="/activities/Походы" target="_blank" class="new-btn">🥾 Походы (${pageData.hikingCount})</a>
+                            <a href="/activities/Хоккей" class="new-btn">🏒 Хоккей (${pageData.hockeyCount})</a>
+                            <a href="/activities/Волейбол" class="new-btn">🏐 Волейбол (${pageData.volleyCount})</a>
+                            <a href="/activities/Походы" class="new-btn">🥾 Походы (${pageData.hikingCount})</a>
                         </div>
                         
                         <div style="margin-top: 30px; text-align:center; width: 100%;">
-                            <a href="/activities/Путешествие" target="_blank" class="travel-link">✈️ Путешествие с тобой... (${pageData.travelCount})</a>
+                            <a href="/activities/Путешествие" class="travel-link">✈️ Путешествие с тобой... (${pageData.travelCount})</a>
                             <br>
                          <a href="/evening" class="evening-link">🌙 После 19:00... <br>Кто что предложит?</a>
                         </div>
@@ -409,14 +425,13 @@ export default (db) => {
                             if(res.ok) {
                                 alert('Сообщение отправлено владельцу в кабинет и опубликовано на главной!');
                                 closeModal();
-                                location.reload(); // Перезагружаем, чтобы сразу увидеть коммент на доске
+                                location.reload();
                             } else {
                                 alert('Ошибка отправки. Попробуйте позже.');
                             }
                         }
 
-                        // 👇 НОВАЯ ФУНКЦИЯ ДЛЯ ЛАЙКОВ/ДИЗЛАЙКОВ
-                        async function voteComment(commentId, type) {
+                        async function voteComment(commentId, type) { 
                             const res = await fetch('/vote-comment', {
                                 method: 'POST',
                                 headers: { 

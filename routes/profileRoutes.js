@@ -1,5 +1,5 @@
-import express from 'express'; 
-import { ObjectId } from "mongodb"; 
+import express from 'express';
+import { ObjectId } from "mongodb";
 import { clearCache, LOGIN_PAGE_CACHE_KEY } from '../cacheService.js'; 
 
 const requireLogin = (req, res, next) => { 
@@ -10,20 +10,17 @@ const requireLogin = (req, res, next) => {
 export default (db) => {
     const router = express.Router();
 
-    // 1. ГЛАВНАЯ СТРАНИЦА ПРОФИЛЯ
-    router.get("/", requireLogin, async (req, res) => {
+    router.get("/", requireLogin, async (req, res) => { 
         try { 
             res.set('Cache-Control', 'public, max-age=0, must-revalidate');  
             const user = await db.collection('users').findOne({ _id: ObjectId.createFromHexString(req.session.user._id) });
             const availability = user.availability || { days: [], time: "" };
 
-            // Загрузка сообщений
-            const allMessages = await db.collection('messages').find({ toUserId: user._id }).sort({ createdAt: -1 }).toArray();
+            const allMessages = await db.collection('messages').find({ toUserId: user._id }).sort({ createdAt: -1 }).toArray(); 
             const eveningMessages = allMessages.filter(m => m.source && m.source.includes('После 19:00'));
             const otherMessages = allMessages.filter(m => !m.source || !m.source.includes('После 19:00'));
 
-            // Рендер сообщений 
-            const renderMsg = (m) => `
+            const renderMsg = (m) => ` 
                 <div class="msg-card">
                     <div class="msg-head">
                         <strong>От: ${m.fromContact}</strong> 
@@ -49,12 +46,12 @@ export default (db) => {
                     <style>
                         body{font-family:Arial;padding:20px;background:url('/images/background.jpg') center/cover fixed;color:white; margin:0;}
                         .content{background:rgba(0,0,0,0.9);padding:30px;border-radius:10px;max-width:700px;margin:auto;box-shadow:0 0 20px rgba(0,0,0,0.7);}
-                        
-                        /* КНОПКИ */
+                         
                         .nav-buttons { display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin-bottom:20px; }
                         .nav-btn { text-decoration:none; padding:12px 20px; border-radius:30px; font-weight:bold; color:white; transition:0.3s; text-align:center; cursor: pointer; }
                         .nav-btn:hover { transform:scale(1.05); }
                         
+                        .btn-home { background: linear-gradient(45deg, #4caf50, #8bc34a); }
                         .btn-cocktail { background: linear-gradient(45deg, #ff9800, #ff5722); }
                         .btn-activities { background: linear-gradient(45deg, #2196f3, #00bcd4); }
                         .btn-publish { background: linear-gradient(45deg, #e056fd, #be2edd); border: 2px solid #fff; }
@@ -65,8 +62,7 @@ export default (db) => {
                         .msg-card { background:rgba(255,255,255,0.1); padding:10px; margin-bottom:10px; border-radius:5px; border-left:4px solid #00c3ff; }
                         .msg-source { font-size:0.8em; color:#d4af37; margin-bottom:5px; font-weight:bold; }
                         hr { border:0; border-top:1px solid #555; margin:20px 0; }
-                      
-                        /* ТАБЫ */
+                       
                         .tabs { display:flex; justify-content:center; gap:20px; margin-bottom:15px; border-bottom:1px solid #555; padding-bottom:10px; flex-wrap:wrap;}
                         .tab-link { color:#aaa; cursor:pointer; font-size:1.1em; padding: 5px 10px; border-radius: 5px; transition: 0.3s;}
                         .tab-link:hover { background: rgba(255,255,255,0.1); }
@@ -91,6 +87,7 @@ export default (db) => {
                         <h2>Кабинет: ${user.name}</h2>
                         
                         <div class="nav-buttons">
+                            <a href="/" class="nav-btn btn-home">🏠 Главная (Стена)</a>
                             <a href="/work" class="nav-btn btn-cocktail">🍹 Коктейль</a>
                             <a href="/activities" class="nav-btn btn-activities">⚽ Активности</a>
                             <a href="/profile/create-evening" class="nav-btn btn-publish">🌙 После 19:00</a>
@@ -128,7 +125,7 @@ export default (db) => {
                             <label>Удобное время:</label><input type="text" name="time" value="${availability.time||''}" placeholder="18:00 - 20:00">
                             <button type="submit">Сохранить</button>
                         </form>
-
+                        
                         <div style="margin-top: 50px; border-top: 1px solid #ccc; padding-top: 20px; text-align: center;">
                             <h3 style="color: #dc3545;">Опасная зона</h3>
                             <form action="/profile/delete" method="POST" onsubmit="return confirm('Вы уверены? Это действие нельзя отменить!');">
@@ -138,9 +135,7 @@ export default (db) => {
                                 </button>
                             </form>
                         </div>
-
-                        <form action="/logout" method="POST" style="text-align:center;margin-top:20px;"><input type="hidden" name="_csrf" value="${res.locals.csrfToken}"><button type="submit" style="background:#777">Выйти</button></form>
-                    </div>
+                    </div> 
 
                     <script>
                         function showTab(id) {
@@ -155,8 +150,7 @@ export default (db) => {
         } catch (error) { console.error(error); res.status(500).send("Ошибка."); }
     });
 
-    // 2. НОВАЯ ОТДЕЛЬНАЯ СТРАНИЦА "ПОСЛЕ 19:00"
-    router.get("/create-evening", requireLogin, async (req, res) => {
+    router.get("/create-evening", requireLogin, async (req, res) => { 
         const user = await db.collection('users').findOne({ _id: ObjectId.createFromHexString(req.session.user._id) });
         
         res.send(`
@@ -204,15 +198,14 @@ export default (db) => {
         `);
     });
 
-    // 3. ОБРАБОТЧИКИ ФОРМ
-    router.post('/update-availability', requireLogin, async (req, res) => {
+    router.post('/update-availability', requireLogin, async (req, res) => { 
         const days = Array.isArray(req.body.days) ? req.body.days : (req.body.days ? [req.body.days] : []);
         await db.collection('users').updateOne(
             { _id: ObjectId.createFromHexString(req.session.user._id) }, 
             { $set: { phone: req.body.phone, city: req.body.city, country: req.body.country, availability: { days, time: req.body.time } } }
         );
         res.redirect('/profile');
- });
+    });
 
     router.post('/messages/delete/:id', requireLogin, async (req, res) => {
         try {
@@ -229,8 +222,7 @@ export default (db) => {
         }
     });
 
-    // 4. УДАЛЕНИЕ АККАУНТА
-    router.post('/delete', requireLogin, async (req, res) => {
+    router.post('/delete', requireLogin, async (req, res) => { 
         try {
             const userId = ObjectId.createFromHexString(req.session.user._id);
             await db.collection('users').deleteOne({ _id: userId });
@@ -247,4 +239,4 @@ export default (db) => {
     }); 
 
     return router;
-};
+}; 
