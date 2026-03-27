@@ -99,7 +99,7 @@ export default (db) => {
         }
     });
 
-    // 👇 НОВЫЙ МАРШРУТ: Добавление ресторана со скидкой
+    // Добавление ресторана со скидкой
     router.post('/add-restaurant', async (req, res) => {
         if (!req.session || !req.session.user) {
             return res.status(401).send('Нужна авторизация');
@@ -121,6 +121,25 @@ export default (db) => {
         }
     });
 
+    // 👇 НОВЫЙ МАРШРУТ: Отправка идей и пожеланий по сайту
+    router.post('/submit-feedback', async (req, res) => {
+        try {
+            const { feedbackText, contactInfo } = req.body;
+            if (feedbackText && feedbackText.trim() !== '') {
+                await db.collection('feedback').insertOne({
+                    text: feedbackText,
+                    contact: contactInfo || 'Гость',
+                    createdAt: new Date()
+                });
+                await clearCache(LOGIN_PAGE_CACHE_KEY);
+            }
+            res.redirect('/');
+        } catch (err) {
+            console.error(err);
+            res.status(500).send('Ошибка при отправке пожелания');
+        }
+    });
+
     // 2. ГЛАВНАЯ СТРАНИЦА
     router.get(["/", "/login"], async (req, res) => { 
         try {
@@ -137,12 +156,13 @@ export default (db) => {
 
             let pageData = await getCache(LOGIN_PAGE_CACHE_KEY); 
             
-            // Добавили проверку на pageData.restaurants, чтобы кэш обновился с новыми данными
-            if (!pageData || !pageData.restaurants) {
+            // 👇 Добавили загрузку feedback (пожеланий)
+            if (!pageData || !pageData.restaurants || !pageData.feedbacks) {
                 const comments = await db.collection("comments").find().sort({ createdAt: -1 }).toArray(); 
                 const tasks = await db.collection('tasks').find().sort({ createdAt: -1 }).toArray(); 
                 const restaurants = await db.collection('restaurants').find().sort({ createdAt: -1 }).toArray(); 
-                pageData = { comments, tasks, restaurants }; 
+                const feedbacks = await db.collection('feedback').find().sort({ createdAt: -1 }).limit(15).toArray(); 
+                pageData = { comments, tasks, restaurants, feedbacks }; 
                 await setCache(LOGIN_PAGE_CACHE_KEY, pageData); 
             }
 
@@ -183,7 +203,7 @@ export default (db) => {
                     c.dislikes.forEach(email => historyItems.push({ type: 'dislike', email, text: shortText, date: c.createdAt }));
                 }
             });
- 
+
             historyItems.sort((a, b) => new Date(b.date) - new Date(a.date));
 
             let freeDislikesShown = 0;
@@ -211,13 +231,13 @@ export default (db) => {
                 }
             }).join('') || '<p style="text-align:center; color:#777; font-size: 14px;">Истории пока нет.</p>';
 
-            const historyContainer = ` 
+            const historyContainer = `
                 <div style="max-height: 250px; overflow-y: auto; padding-right: 5px;" class="custom-scrollbar">
                     ${historyHtml}
                 </div>
             `;
 
-            // 👇 Рендер блока ресторанов
+            // Рендер блока ресторанов
             let restaurantsHtml = (pageData.restaurants || []).map(r => `
                 <div style="background: rgba(255,152,0,0.1); padding: 12px; margin-bottom: 10px; border-radius: 5px; border-left: 4px solid #ff9800;">
                     <div style="font-size: 15px; margin-bottom: 5px; display: flex; justify-content: space-between;">
@@ -232,6 +252,19 @@ export default (db) => {
             const restaurantsContainer = `
                 <div style="max-height: 250px; overflow-y: auto; padding-right: 5px;" class="custom-scrollbar">
                     ${restaurantsHtml}
+                </div>
+            `;
+
+            // 👇 Рендер списка идей и пожеланий
+            let feedbacksHtml = (pageData.feedbacks || []).map(f => `
+                <div style="background: rgba(255,255,255,0.1); padding: 10px; margin-bottom: 5px; border-radius: 5px; font-size: 13px; border-left: 3px solid #6cafff;">
+                    <b style="color: #6cafff;">${f.contact}:</b> <span style="color:#eee;">${f.text}</span>
+                </div>
+            `).join('') || '<p style="text-align:center; color:#777; font-size: 13px;">Будьте первыми!</p>';
+
+            const feedbackContainer = `
+                <div style="max-height: 150px; overflow-y: auto; padding-right: 5px; margin-bottom: 15px;" class="custom-scrollbar">
+                    ${feedbacksHtml}
                 </div>
             `;
 
@@ -440,6 +473,21 @@ export default (db) => {
 
                     <div class="page-section">
                         <div class="main-wrapper">
+                            
+                            <div class="block">
+                                <h3 style="color: #6cafff; margin-top:0;">💡 Идеи и пожелания</h3>
+                                <p style="font-size: 12px; color: #ccc; margin-top: -10px;">Как нам улучшить сайт?</p>
+                                
+                                ${feedbackContainer}
+
+                                <form action="/submit-feedback" method="POST" style="margin:0;">
+                                    <input type="hidden" name="_csrf" value="${res.locals.csrfToken}">
+                                    <input type="text" name="contactInfo" placeholder="Ваше имя/контакт" value="${currentUser ? (currentUser.name || currentUser.email) : ''}" required style="padding: 8px; font-size: 14px;">
+                                    <textarea name="feedbackText" placeholder="Напишите вашу идею..." required style="width: 100%; height: 50px; margin-bottom: 10px; padding: 8px; box-sizing: border-box; border-radius: 5px; font-size: 14px; resize: none;"></textarea>
+                                    <button type="submit" style="background:#007BFF; padding: 10px; font-size: 14px;">Отправить идею</button>
+                                </form>
+                            </div>
+                            
                             <div class="block">
                                 ${authBlockHtml}
                                 <hr>
@@ -508,8 +556,7 @@ export default (db) => {
                             currentImageId = id;
                         }
 
-                        // Обновленная функция закрытия модалок
-                        function closeModal(modalId) {
+                        function closeModal(modalId) { 
                             document.getElementById(modalId).style.display = 'none';
                         }
 
@@ -557,14 +604,13 @@ export default (db) => {
                                 const data = await res.json();
                                 document.getElementById('likes-' + commentId).innerHTML = '<b>' + data.likes + '</b>';
                                 document.getElementById('dislikes-' + commentId).innerHTML = '<b>' + data.dislikes + '</b>';
-                                location.reload(); 
+                                location.reload();
                             } else {
                                 alert('Произошла ошибка при голосовании.');
                             }
                         }
 
-                        // Закрытие по клику вне окна
-                        window.onclick = function(event) {
+                         window.onclick = function(event) {
                             const photoModal = document.getElementById('photoModal');
                             const restModal = document.getElementById('restaurantModal');
                             if (event.target == photoModal) closeModal('photoModal');
