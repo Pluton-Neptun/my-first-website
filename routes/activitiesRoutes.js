@@ -35,13 +35,17 @@ export default (db) => {
                  
                 let actionHtml = '';
                 if (isJoined) {
-                    actionHtml = `<button type="submit" name="action" value="leave" class="btn btn-leave">Отписаться</button>`;
+                    actionHtml = `
+                        <input type="hidden" name="action" value="leave">
+                        <button type="submit" class="btn btn-leave">Отписаться</button>
+                    `;
                 } else {
                     actionHtml = `
+                        <input type="hidden" name="action" value="join">
                         <div class="limit-box">
                             <label>Хочу до: <input type="number" name="limit" placeholder="∞"></label> чел.
                         </div>
-                        <button type="submit" name="action" value="join" class="btn btn-join">Записаться</button>
+                        <button type="submit" class="btn btn-join">Записаться</button>
                     `;
                 }
 
@@ -51,9 +55,7 @@ export default (db) => {
                         <a href="/activities/${name}" class="activity-title">${label || name}</a>
                         <span class="activity-count">Уч: ${count}</span>
                     </div>
-                    <form action="/activities/update" method="POST" class="activity-form">
-                        <input type="hidden" name="_csrf" value="${res.locals.csrfToken}">
-                        <input type="hidden" name="activity" value="${name}">
+                    <form onsubmit="updateActivity(event, '${name}')" class="activity-form">
                         ${actionHtml}
                     </form>
                 </div>`; 
@@ -80,7 +82,10 @@ export default (db) => {
                     .btn-join { background-color: #28a745; } .btn-join:hover { background-color: #218838; }
                     .btn-leave { background-color: #dc3545; } .btn-leave:hover { background-color: #c82333; }
                     
-                    a.back-link { display: block; background: #6c757d; color: white; text-align: center; padding: 15px; margin-top: 30px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px;}
+                    .nav-buttons { display: flex; gap: 10px; margin-top: 30px; }
+                    a.back-link { flex: 1; display: block; color: white; text-align: center; padding: 15px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px; box-sizing: border-box;}
+                    a.btn-back-smart { background: #6c757d; }
+                    a.btn-home { background: #007BFF; }
                     
                     /* МОБИЛЬНАЯ АДАПТАЦИЯ */
                     @media (max-width: 600px) {
@@ -89,6 +94,7 @@ export default (db) => {
                         .activity-title { font-size: 1.4em; }
                         .limit-box { display: flex; align-items: center; justify-content: space-between; background: #f9f9f9; padding: 10px; border-radius: 5px; }
                         .btn { padding: 15px; font-size: 18px; }
+                        .nav-buttons { flex-direction: column; }
                     }
                 </style></head><body>
                 <div class="tab-container">
@@ -107,14 +113,52 @@ export default (db) => {
                     <h3>Для души</h3>
                     ${renderCard("Путешествие", counts.travel, "✈️ Путешествие с тобой")}
                     
-                    <a href="javascript:history.back()" class="back-link">⬅ Назад</a>
-                </div></body></html>
+                    <div class="nav-buttons">
+                        <a href="javascript:history.back()" class="back-link btn-back-smart">⬅ Назад</a>
+                        <a href="/" class="back-link btn-home">🏠 На главную</a>
+                    </div>
+                </div>
+                
+                <script>
+                    // Функция фоновой записи без порчи истории браузера
+                    async function updateActivity(e, name) {
+                        e.preventDefault();
+                        const form = e.target;
+                        const action = form.action.value;
+                        const limit = form.limit ? form.limit.value : '';
+                        
+                        // Делаем кнопку полупрозрачной во время загрузки
+                        const btn = form.querySelector('button');
+                        btn.disabled = true;
+                        btn.style.opacity = '0.7';
+                        btn.innerText = 'Секунду...';
+
+                        const res = await fetch('/activities/update', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'x-csrf-token': '${res.locals.csrfToken}'
+                            },
+                            body: JSON.stringify({ activity: name, action: action, limit: limit })
+                        });
+
+                        if(res.ok) {
+                            // Перезагружаем страницу, заменяя текущий кадр в истории
+                            window.location.replace(window.location.href);
+                        } else {
+                            alert('Произошла ошибка обновления');
+                            btn.disabled = false;
+                            btn.style.opacity = '1';
+                        }
+                    }
+                </script>
+                </body></html>
             `);
         } catch(error) { console.error(error); res.status(500).send("Ошибка."); }
     });
 
     // ------------------------------------------
-    // 2. ОБНОВЛЕНИЕ ПОДПИСКИ
+    // 2. ОБНОВЛЕНИЕ ПОДПИСКИ (ФОНОВЫЙ AJAX)
     // ------------------------------------------
     router.post("/update", requireLogin, async (req, res) => {
         try {
@@ -124,10 +168,11 @@ export default (db) => {
             if(action === "join") await addUserActivity(db, uid, activity, limit);
             else await removeUserActivity(db, uid, activity);
             
-            res.redirect("back"); // Умный редирект назад после записи/отписки
+            // Теперь отправляем просто статус "Ок" вместо редиректа
+            res.json({ status: 'ok' }); 
         } catch (e) {
             console.error(e);
-            res.status(500).send("Ошибка обновления активности");
+            res.status(500).json({ error: "Ошибка обновления активности" });
         }
     });
 
