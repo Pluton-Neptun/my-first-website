@@ -2,19 +2,20 @@ import express from 'express';
 import path from 'path';
 import { ObjectId } from "mongodb";
 import multer from 'multer'; 
+import sharp from 'sharp'; // 👈 ДОБАВИЛИ БИБЛИОТЕКУ ДЛЯ СЖАТИЯ ФОТО
 import { clearCache, LOGIN_PAGE_CACHE_KEY } from '../cacheService.js';
 
 const __dirname = path.resolve();
 const requireLogin = (req, res, next) => { if (req.session.user) next(); else return res.redirect("/login"); };
 
-// 1. НАСТРОЙКА ЗАГРУЗКИ В ПАМЯТЬ (ВАЖНО ДЛЯ RENDER)
-const storage = multer.memoryStorage(); 
+// НАСТРОЙКА ЗАГРУЗКИ В ПАМЯТЬ
+const storage = multer.memoryStorage();
 const upload = multer({ 
     storage: storage,
-    limits: { fileSize: 10 * 1024 * 1024 } 
+    limits: { fileSize: 15 * 1024 * 1024 } // Увеличили лимит до 15МБ, чтобы тяжелые фото с айфонов проходили
 });
 
-export default (db) => {  
+export default (db) => { 
     const router = express.Router();
 
     // =========================================================
@@ -56,8 +57,9 @@ export default (db) => {
                   .status-group label { display: block; margin-bottom: 8px; cursor: pointer; padding: 5px; background: rgba(0,0,0,0.2); border-radius: 4px; transition: 0.2s;}
                   .status-group label:hover { background: rgba(255,255,255,0.1); }
                   
-                  button { padding: 12px 20px; background: #ff9800; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; margin-top: 10px; }
+                  button { padding: 12px 20px; background: #ff9800; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; margin-top: 10px; transition: 0.3s;}
                   button:hover { opacity: 0.9; }
+                  button:disabled { background: #555; cursor: not-allowed; }
                   a.btn-back { display: block; background: #6c757d; color: white; text-align: center; padding: 12px; margin-top: 20px; text-decoration: none; border-radius: 5px; }
 
                   /* --- МОБИЛЬНАЯ АДАПТАЦИЯ --- */
@@ -84,7 +86,7 @@ export default (db) => {
                     <div id="tab-tasks" class="tab-content active">
                       <h2>Загрузить фото</h2>
                       <form id="upload-form" enctype="multipart/form-data">
-                          <input type="file" name="document" required style="margin-bottom:10px; color:white; width:100%">
+                          <input type="file" name="document" accept="image/*" required style="margin-bottom:10px; color:white; width:100%">
                           
                           <div class="status-group">
                               <p style="margin-top:0; font-weight:bold; color:#ff9800;">Настройки статуса:</p>
@@ -97,7 +99,7 @@ export default (db) => {
                               <input type="text" name="amount" placeholder="ИЛИ напишите свою сумму/условие...">
                           </div>
                           
-                          <button type="submit" style="width:100%">Загрузить в Галерею</button>
+                          <button type="submit" id="upload-btn" style="width:100%">Загрузить в Галерею</button>
                       </form>
                       <h3 style="margin-top: 30px;">Мои активные файлы:</h3>
                       <ul id="tasks-list" style="list-style:none; padding:0;"></ul>
@@ -129,11 +131,27 @@ export default (db) => {
                     
                     document.getElementById('upload-form').addEventListener('submit', async (e) => {
                         e.preventDefault();
-                        const formData = new FormData(e.target); 
-                        await fetch('/work/upload', { method: 'POST', body: formData, headers: {'x-csrf-token': CSRF_TOKEN} });
-                        loadTasks();
-                        alert('Фото загружено в Галерею (Надежно)!');
-                        e.target.reset();
+                        const btn = document.getElementById('upload-btn');
+                        btn.disabled = true;
+                        btn.innerText = 'Обработка и загрузка (подождите)...';
+
+                        const formData = new FormData(e.target);
+                        
+                        try {
+                            const res = await fetch('/work/upload', { method: 'POST', body: formData, headers: {'x-csrf-token': CSRF_TOKEN} });
+                            if (res.ok) {
+                                loadTasks();
+                                alert('Фото успешно загружено!');
+                                e.target.reset();
+                            } else {
+                                alert('Ошибка при загрузке. Возможно, файл слишком огромный.');
+                            }
+                        } catch (err) {
+                            alert('Произошла ошибка сети.');
+                        } finally {
+                            btn.disabled = false;
+                            btn.innerText = 'Загрузить в Галерею';
+                        }
                     });
 
                     async function loadTasks() {
@@ -142,8 +160,7 @@ export default (db) => {
                         const list = document.getElementById('tasks-list');
                         if(tasks.length === 0) { list.innerHTML = '<p>Нет загруженных фото.</p>'; return; }
 
-                        list.innerHTML = tasks.map(t => {
-                            // Логика отображения правильного текста
+                        list.innerHTML = tasks.map(t => { 
                             let statusText = '';
                             if (t.amount) statusText = t.amount;
                             else if (t.status === 'free') statusText = 'Свободна сегодня';
@@ -215,19 +232,27 @@ export default (db) => {
     });
 
     // =========================================================
-    // 2. ОБРАБОТКА ЗАГРУЗКИ (Base64)
+    // 2. ОБРАБОТКА ЗАГРУЗКИ С УМНЫМ СЖАТИЕМ (SHARP)
     // =========================================================
     router.post('/upload', requireLogin, upload.single('document'), async (req, res) => {
         try {
             if (!req.file) return res.status(400).json({ error: 'Нет файла' });
 
-            const imgBase64 = req.file.buffer.toString('base64'); 
+            // 👇 МАГИЯ СЖАТИЯ:
+            // Превращаем любую тяжелую фотку в легкий JPEG шириной макс 800px
+            const compressedImageBuffer = await sharp(req.file.buffer)
+                .resize({ width: 800, withoutEnlargement: true }) // Уменьшаем размер
+                .jpeg({ quality: 80 }) // Сжимаем до 80% качества
+                .toBuffer();
 
-            await db.collection('tasks').insertOne({ 
+            // Теперь в Base64 переводим уже сжатую картинку!
+            const imgBase64 = compressedImageBuffer.toString('base64');
+
+            await db.collection('tasks').insertOne({
                 originalName: req.file.originalname, 
-                fileName: req.file.originalname,  
+                fileName: req.file.originalname, 
                 imageBase64: imgBase64, 
-                mimetype: req.file.mimetype,  
+                mimetype: 'image/jpeg', // Мы конвертнули в JPEG, поэтому тип фиксированный
                 
                 uploadedBy: req.session.user.name, 
                 userId: ObjectId.createFromHexString(req.session.user._id), 
@@ -236,17 +261,17 @@ export default (db) => {
                 createdAt: new Date()
             });
 
-            await clearCache(LOGIN_PAGE_CACHE_KEY);  
+            await clearCache(LOGIN_PAGE_CACHE_KEY); 
             
             res.json({ status: 'ok' });
         } catch (error) { 
-            console.error(error);
+            console.error('Ошибка при сжатии или загрузке:', error);
             res.status(500).json({ error: 'Ошибка загрузки' }); 
         }
     });
 
-    router.get('/tasks', requireLogin, async (req, res) => {  
-        const tasks = await db.collection('tasks') 
+    router.get('/tasks', requireLogin, async (req, res) => { 
+        const tasks = await db.collection('tasks')
             .find({ userId: ObjectId.createFromHexString(req.session.user._id) })
             .project({ imageBase64: 0 }) 
             .sort({ createdAt: -1 })
@@ -254,18 +279,18 @@ export default (db) => {
         res.json(tasks);
     });
 
-    router.delete('/tasks/:id', requireLogin, async (req, res) => {  
+    router.delete('/tasks/:id', requireLogin, async (req, res) => { 
         await db.collection('tasks').deleteOne({ _id: ObjectId.createFromHexString(req.params.id) });
         await clearCache(LOGIN_PAGE_CACHE_KEY);
         res.sendStatus(200);
     });
 
-   router.get('/messages', requireLogin, async (req, res) => { 
+   router.get('/messages', requireLogin, async (req, res) => {
         const msgs = await db.collection('messages').find({ toUserId: ObjectId.createFromHexString(req.session.user._id) }).sort({ createdAt: -1 }).toArray();
         res.json(msgs);
     });
 
-    router.post('/reply', requireLogin, async (req, res) => { 
+    router.post('/reply', requireLogin, async (req, res) => {
         await db.collection('messages').updateOne({ _id: ObjectId.createFromHexString(req.body.msgId) }, { $set: { reply: req.body.text, isRead: true } });
         res.json({ status: 'ok' });
     });
