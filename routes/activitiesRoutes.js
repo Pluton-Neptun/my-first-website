@@ -107,7 +107,7 @@ export default (db) => {
                     <h3>Для души</h3>
                     ${renderCard("Путешествие", counts.travel, "✈️ Путешествие с тобой")}
                     
-                    <a href="/" class="back-link">⬅ Вернуться на главную</a>
+                    <a href="javascript:history.back()" class="back-link">⬅ Назад</a>
                 </div></body></html>
             `);
         } catch(error) { console.error(error); res.status(500).send("Ошибка."); }
@@ -124,7 +124,7 @@ export default (db) => {
             if(action === "join") await addUserActivity(db, uid, activity, limit);
             else await removeUserActivity(db, uid, activity);
             
-            res.redirect("/activities");
+            res.redirect("back"); // Умный редирект назад после записи/отписки
         } catch (e) {
             console.error(e);
             res.status(500).send("Ошибка обновления активности");
@@ -200,7 +200,7 @@ export default (db) => {
                 </style></head><body>
                 <h1>${activityName}</h1>
                 ${html}
-                <a href="/activities" class="back-btn">⬅ Назад к списку</a>
+                <a href="javascript:history.back()" class="back-btn">⬅ Назад</a>
                 
                 <script>
                     async function sendActivityMessage(e,t){
