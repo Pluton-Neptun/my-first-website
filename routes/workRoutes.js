@@ -8,15 +8,13 @@ const __dirname = path.resolve();
 const requireLogin = (req, res, next) => { if (req.session.user) next(); else return res.redirect("/login"); };
 
 // 1. НАСТРОЙКА ЗАГРУЗКИ В ПАМЯТЬ (ВАЖНО ДЛЯ RENDER)
-// Мы не сохраняем файлы на диск, мы держим их в RAM, чтобы сразу положить в Базу
-const storage = multer.memoryStorage();
+const storage = multer.memoryStorage(); 
 const upload = multer({ 
     storage: storage,
-    limits: { fileSize: 10 * 1024 * 1024 } // Лимит 10MB (чтобы база не лопнула)
+    limits: { fileSize: 10 * 1024 * 1024 } 
 });
 
-// Убрал uploadDisk из аргументов, он больше не нужен
-export default (db) => { 
+export default (db) => {  
     const router = express.Router();
 
     // =========================================================
@@ -55,7 +53,8 @@ export default (db) => {
                   /* ЗАГРУЗКА */
                   .status-group { margin: 15px 0; background: rgba(255,255,255,0.1); padding: 15px; border-radius: 5px; }
                   .status-group input[type="text"] { width: 100%; padding: 10px; margin-top: 10px; border-radius: 5px; border: none; box-sizing: border-box; }
-                  .status-group label { display: block; margin-bottom: 5px; cursor: pointer; padding: 5px; }
+                  .status-group label { display: block; margin-bottom: 8px; cursor: pointer; padding: 5px; background: rgba(0,0,0,0.2); border-radius: 4px; transition: 0.2s;}
+                  .status-group label:hover { background: rgba(255,255,255,0.1); }
                   
                   button { padding: 12px 20px; background: #ff9800; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; margin-top: 10px; }
                   button:hover { opacity: 0.9; }
@@ -89,8 +88,11 @@ export default (db) => {
                           
                           <div class="status-group">
                               <p style="margin-top:0; font-weight:bold; color:#ff9800;">Настройки статуса:</p>
-                              <label><input type="radio" name="status" value="free"> Свободна сегодня</label>
+                              <label><input type="radio" name="status" value="free" checked> Свободна сегодня</label>
                               <label><input type="radio" name="status" value="company"> Ждем компанию</label>
+                              <label><input type="radio" name="status" value="alone"> Я одна (или один)</label>
+                              <label><input type="radio" name="status" value="want_cocktail"> Хочу коктейль 🍹</label>
+                              <label><input type="radio" name="status" value="ride"> Прокатиться с ветерком 🚗</label>
                               <hr style="border:0; border-top:1px solid #555; margin:10px 0;">
                               <input type="text" name="amount" placeholder="ИЛИ напишите свою сумму/условие...">
                           </div>
@@ -117,7 +119,7 @@ export default (db) => {
                     function openTab(id) {
                         document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
                         document.querySelectorAll('.tab-button').forEach(b => b.classList.remove('active'));
-                     document.getElementById(id).classList.add('active');
+                        document.getElementById(id).classList.add('active');
                         const btns = document.querySelectorAll('.tab-button');
                         if(id === 'tab-tasks') btns[0].classList.add('active');
                         else btns[1].classList.add('active');
@@ -127,8 +129,7 @@ export default (db) => {
                     
                     document.getElementById('upload-form').addEventListener('submit', async (e) => {
                         e.preventDefault();
-                        const formData = new FormData(e.target);
-                        // Отправляем с заголовком CSRF
+                        const formData = new FormData(e.target); 
                         await fetch('/work/upload', { method: 'POST', body: formData, headers: {'x-csrf-token': CSRF_TOKEN} });
                         loadTasks();
                         alert('Фото загружено в Галерею (Надежно)!');
@@ -141,14 +142,26 @@ export default (db) => {
                         const list = document.getElementById('tasks-list');
                         if(tasks.length === 0) { list.innerHTML = '<p>Нет загруженных фото.</p>'; return; }
 
-                        list.innerHTML = tasks.map(t => \`
+                        list.innerHTML = tasks.map(t => {
+                            // Логика отображения правильного текста
+                            let statusText = '';
+                            if (t.amount) statusText = t.amount;
+                            else if (t.status === 'free') statusText = 'Свободна сегодня';
+                            else if (t.status === 'company') statusText = 'Ждем компанию';
+                            else if (t.status === 'alone') statusText = 'Я одна (или один)';
+                            else if (t.status === 'want_cocktail') statusText = 'Хочу коктейль 🍹';
+                            else if (t.status === 'ride') statusText = 'Прокатиться с ветерком 🚗';
+                            else statusText = 'Временно занята';
+
+                            return \`
                             <li style="background:rgba(255,255,255,0.1); padding:10px; margin-bottom:5px; border-radius:5px; display:flex; justify-content:space-between; align-items:center;">
                                 <div>
                                     <strong>\${t.originalName}</strong><br>
-                                    <small style="color:#aaa">\${t.amount ? t.amount : (t.status === 'free' ? 'Свободна' : 'Ждем компанию')}</small>
+                                    <small style="color:#aaa">\${statusText}</small>
                                 </div>
                                 <button onclick="deleteTask('\${t._id}')" style="background:#dc3545; padding:8px 15px; margin:0; width:auto; font-size:14px;">Удалить</button>
-                            </li>\`).join('');
+                            </li>\`
+                        }).join('');
                     }
 
                     async function deleteTask(id) {
@@ -208,16 +221,13 @@ export default (db) => {
         try {
             if (!req.file) return res.status(400).json({ error: 'Нет файла' });
 
-            // 1. Превращаем файл из буфера (памяти) в строку Base64
-            const imgBase64 = req.file.buffer.toString('base64');
+            const imgBase64 = req.file.buffer.toString('base64'); 
 
-            // 2. Сохраняем в базу данных
-            await db.collection('tasks').insertOne({
+            await db.collection('tasks').insertOne({ 
                 originalName: req.file.originalname, 
-                fileName: req.file.originalname, 
-                // Вместо пути к файлу сохраняем САМ файл в тексте
+                fileName: req.file.originalname,  
                 imageBase64: imgBase64, 
-                mimetype: req.file.mimetype, // (например image/jpeg)
+                mimetype: req.file.mimetype,  
                 
                 uploadedBy: req.session.user.name, 
                 userId: ObjectId.createFromHexString(req.session.user._id), 
@@ -226,8 +236,7 @@ export default (db) => {
                 createdAt: new Date()
             });
 
-            // 3. Чистим кэш главной, чтобы фото появилось сразу
-            await clearCache(LOGIN_PAGE_CACHE_KEY); 
+            await clearCache(LOGIN_PAGE_CACHE_KEY);  
             
             res.json({ status: 'ok' });
         } catch (error) { 
@@ -236,33 +245,27 @@ export default (db) => {
         }
     });
 
-    // Получить список загрузок (для админки)
-    router.get('/tasks', requireLogin, async (req, res) => { 
-        // Мы НЕ загружаем саму картинку (imageBase64) в этот список, чтобы он работал быстро
-        // Картинка загружается только на ГЛАВНОЙ странице
-        const tasks = await db.collection('tasks')
+    router.get('/tasks', requireLogin, async (req, res) => {  
+        const tasks = await db.collection('tasks') 
             .find({ userId: ObjectId.createFromHexString(req.session.user._id) })
-            .project({ imageBase64: 0 }) // <--- Исключаем тяжелое поле
+            .project({ imageBase64: 0 }) 
             .sort({ createdAt: -1 })
             .toArray(); 
         res.json(tasks);
     });
 
-    // Удаление
-    router.delete('/tasks/:id', requireLogin, async (req, res) => { 
+    router.delete('/tasks/:id', requireLogin, async (req, res) => {  
         await db.collection('tasks').deleteOne({ _id: ObjectId.createFromHexString(req.params.id) });
         await clearCache(LOGIN_PAGE_CACHE_KEY);
         res.sendStatus(200);
     });
 
-    // Сообщения
-   router.get('/messages', requireLogin, async (req, res) => {
+   router.get('/messages', requireLogin, async (req, res) => { 
         const msgs = await db.collection('messages').find({ toUserId: ObjectId.createFromHexString(req.session.user._id) }).sort({ createdAt: -1 }).toArray();
         res.json(msgs);
     });
 
-    // Ответ на сообщение
-    router.post('/reply', requireLogin, async (req, res) => {
+    router.post('/reply', requireLogin, async (req, res) => { 
         await db.collection('messages').updateOne({ _id: ObjectId.createFromHexString(req.body.msgId) }, { $set: { reply: req.body.text, isRead: true } });
         res.json({ status: 'ok' });
     });

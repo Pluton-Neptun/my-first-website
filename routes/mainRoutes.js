@@ -11,49 +11,34 @@ export default (db) => {
     // 👇 ВПИШИ СЮДА СВОЙ EMAIL, ЧТОБЫ САЙТ ПОНЯЛ, ЧТО ТЫ АДМИН
     const ADMIN_EMAIL = 'tin@mail.ru'; // <--- ИЗМЕНИ НА СВОЮ ПОЧТУ
 
-    // Секретная ссылка для очистки кэша (на всякий случай оставляем)
-    router.get('/clear-cache-now', async (req, res) => {
+    router.get('/clear-cache-now', async (req, res) => { 
         try {
             await clearCache(LOGIN_PAGE_CACHE_KEY);
             res.send('<h2 style="color: green; text-align: center; margin-top: 50px;">✅ Кэш Redis успешно сброшен!</h2><div style="text-align: center;"><a href="/" style="font-size: 20px;">Вернуться на главную</a></div>');
         } catch (error) { res.send('Ошибка: ' + error.message); }
     });
 
-    // 👇 НОВЫЙ МАРШРУТ: Удаление контента админом
-    router.post('/admin-delete', async (req, res) => {
-        // Проверяем, что это именно ты (админ) нажал кнопку
+    router.post('/admin-delete', async (req, res) => { 
         if (!req.session || !req.session.user || req.session.user.email !== ADMIN_EMAIL) {
             return res.status(403).send('У вас нет прав для удаления');
         }
-
-        try {
+        try { 
             const { type, id } = req.body;
-            
-            if (type === 'comment') {
-                await db.collection('comments').deleteOne({ _id: new ObjectId(id) });
-            } else if (type === 'feedback') {
-                await db.collection('feedback').deleteOne({ _id: new ObjectId(id) });
-            } else if (type === 'restaurant') {
-                await db.collection('restaurants').deleteOne({ _id: new ObjectId(id) });
-            }
+            if (type === 'comment') await db.collection('comments').deleteOne({ _id: new ObjectId(id) });
+            else if (type === 'feedback') await db.collection('feedback').deleteOne({ _id: new ObjectId(id) });
+            else if (type === 'restaurant') await db.collection('restaurants').deleteOne({ _id: new ObjectId(id) });
 
-            // Автоматически чистим кэш после удаления
             await clearCache(LOGIN_PAGE_CACHE_KEY);
             res.redirect('/');
-        } catch (err) {
-            console.error(err);
-            res.status(500).send('Ошибка при удалении');
-        }
+        } catch (err) { console.error(err); res.status(500).send('Ошибка при удалении'); }
     });
 
-    // 1. ОТПРАВКА СООБЩЕНИЯ (Галерея)
-    router.post('/send-message', async (req, res) => {
-        try { 
+    router.post('/send-message', async (req, res) => { 
+        try {
             const { toUserId, imageId, messageText, contactInfo, source } = req.body;
-             let receiverId; 
-            try {
-                receiverId = new ObjectId(toUserId);
-            } catch (e) {
+            let receiverId; 
+            try { receiverId = new ObjectId(toUserId); } 
+            catch (e) {
                 if (imageId) { 
                     const img = await db.collection('tasks').findOne({ _id: new ObjectId(imageId) });
                     if (img) receiverId = new ObjectId(img.userId);
@@ -63,34 +48,22 @@ export default (db) => {
             if (!receiverId) return res.status(400).json({ error: 'Не найден получатель' });
 
             await db.collection('messages').insertOne({
-                toUserId: receiverId, 
-                fromContact: contactInfo || "Гость",
-                imageId: imageId ? new ObjectId(imageId) : null, 
-                source: source || "Галерея",
-                text: messageText,
-                reply: null,
-                createdAt: new Date(),
-                isRead: false
+                toUserId: receiverId, fromContact: contactInfo || "Гость",
+                imageId: imageId ? new ObjectId(imageId) : null, source: source || "Галерея",
+                text: messageText, reply: null, createdAt: new Date(), isRead: false
             });
             
-            await db.collection('comments').insertOne({
-                authorName: contactInfo || "Гость",
-                text: messageText,
-                createdAt: new Date(),
-                likes: [],
-                dislikes: []
-            });
+            await db.collection('comments').insertOne({ authorName: contactInfo || "Гость", text: messageText, createdAt: new Date(), likes: [], dislikes: [] });
             await clearCache(LOGIN_PAGE_CACHE_KEY); 
-            res.json({ status: 'ok' }); 
+            res.json({ status: 'ok' });
         } catch (error) { console.error(error); res.status(500).json({ error: 'Ошибка отправки' }); }
     });
 
-    // Голосование за комментарий
-    router.post('/vote-comment', async (req, res) => {
+    router.post('/vote-comment', async (req, res) => { 
         if (!req.session || !req.session.user) return res.status(401).json({ error: 'Нужна авторизация' });
         try {
             const { commentId, type } = req.body;
-            const userEmail = req.session.user.email; 
+            const userEmail = req.session.user.email;
             const comment = await db.collection("comments").findOne({ _id: new ObjectId(commentId) });
             if (!comment) return res.status(404).json({ error: 'Не найден' });
 
@@ -111,28 +84,23 @@ export default (db) => {
         } catch (err) { console.error(err); res.status(500).json({ error: 'Ошибка сервера' }); }
     });
 
-    // Добавление ресторана
-    router.post('/add-restaurant', async (req, res) => {
+    router.post('/add-restaurant', async (req, res) => { 
         if (!req.session || !req.session.user) return res.status(401).send('Нужна авторизация');
         try {
             await db.collection('restaurants').insertOne({
-                name: req.body.name, discount: req.body.discount,
-                description: req.body.description, contact: req.body.contact,
-                addedBy: req.session.user.email, createdAt: new Date()
+                name: req.body.name, discount: req.body.discount, description: req.body.description,
+                contact: req.body.contact, addedBy: req.session.user.email, createdAt: new Date()
             });
             await clearCache(LOGIN_PAGE_CACHE_KEY);
             res.redirect('/');
         } catch (e) { console.error(e); res.status(500).send("Ошибка при добавлении ресторана"); }
     });
 
-    // Отправка пожеланий
-    router.post('/submit-feedback', async (req, res) => {
+    router.post('/submit-feedback', async (req, res) => { 
         try {
             const { feedbackText, contactInfo } = req.body;
             if (feedbackText && feedbackText.trim() !== '') {
-                await db.collection('feedback').insertOne({
-                    text: feedbackText, contact: contactInfo || 'Гость', createdAt: new Date()
-                });
+                await db.collection('feedback').insertOne({ text: feedbackText, contact: contactInfo || 'Гость', createdAt: new Date() });
                 await clearCache(LOGIN_PAGE_CACHE_KEY);
             }
             res.redirect('/');
@@ -145,15 +113,14 @@ export default (db) => {
             res.set('Cache-Control', 'public, max-age=0, must-revalidate'); 
             
             const currentUser = req.session && req.session.user ? req.session.user : null;
-            // Проверяем, админ ли сейчас зашел
-            const isAdmin = currentUser && currentUser.email === ADMIN_EMAIL;
+             const isAdmin = currentUser && currentUser.email === ADMIN_EMAIL;
             
             let activityCounts = {};
             try { activityCounts = await checkLimitsAndGetCounts(db); } catch (err) { console.error(err); }
 
             let pageData = await getCache(LOGIN_PAGE_CACHE_KEY); 
             
-             if (!pageData || !pageData.restaurants || !pageData.feedbacks) {
+            if (!pageData || !pageData.restaurants || !pageData.feedbacks) {
                 const comments = await db.collection("comments").find().sort({ createdAt: -1 }).toArray(); 
                 const tasks = await db.collection('tasks').find().sort({ createdAt: -1 }).toArray(); 
                 const restaurants = await db.collection('restaurants').find().sort({ createdAt: -1 }).toArray(); 
@@ -170,8 +137,7 @@ export default (db) => {
             pageData.hikingCount = activityCounts["Походы"] || 0;
             pageData.travelCount = activityCounts["Путешествие"] || 0;
  
-            // Кнопка удаления для админа
-            const getDeleteBtn = (type, id) => {
+            const getDeleteBtn = (type, id) => { 
                 if (!isAdmin) return '';
                 return `
                 <form action="/admin-delete" method="POST" style="position: absolute; right: 5px; top: 5px; margin: 0; z-index: 10;">
@@ -182,8 +148,7 @@ export default (db) => {
                 </form>`;
             };
 
-            // Рендер комментариев
-            let commentsHtml = pageData.comments.map(c => {
+             let commentsHtml = pageData.comments.map(c => {
                 const likesCount = c.likes ? c.likes.length : 0;
                 const dislikesCount = c.dislikes ? c.dislikes.length : 0;
                 return `
@@ -191,24 +156,19 @@ export default (db) => {
                     ${getDeleteBtn('comment', c._id)}
                     <div style="font-size: 14px; margin-bottom: 8px;"><b>${c.authorName}:</b> ${c.text}</div>
                     <div style="display: flex; gap: 15px; font-size: 13px;">
-                        <span onclick="voteComment('${c._id}', 'like')" style="cursor: pointer; color: #28a745; user-select: none; padding: 2px 5px; border-radius: 3px; background: rgba(40,167,69,0.1);">
-                            👍 <span id="likes-${c._id}"><b>${likesCount}</b></span>
-                        </span>
-                        <span onclick="voteComment('${c._id}', 'dislike')" style="cursor: pointer; color: #dc3545; user-select: none; padding: 2px 5px; border-radius: 3px; background: rgba(220,53,69,0.1);">
-                            👎 <span id="dislikes-${c._id}"><b>${dislikesCount}</b></span>
-                        </span>
+                        <span onclick="voteComment('${c._id}', 'like')" style="cursor: pointer; color: #28a745; user-select: none; padding: 2px 5px; border-radius: 3px; background: rgba(40,167,69,0.1);">👍 <span id="likes-${c._id}"><b>${likesCount}</b></span></span>
+                        <span onclick="voteComment('${c._id}', 'dislike')" style="cursor: pointer; color: #dc3545; user-select: none; padding: 2px 5px; border-radius: 3px; background: rgba(220,53,69,0.1);">👎 <span id="dislikes-${c._id}"><b>${dislikesCount}</b></span></span>
                     </div>
                 </div>`;
             }).join('');
 
-            // История оценок
-            let historyItems = [];
+            let historyItems = []; 
             pageData.comments.forEach(c => {
                 const shortText = c.text.length > 25 ? c.text.substring(0, 25) + '...' : c.text;
                 if (c.likes) c.likes.forEach(email => historyItems.push({ type: 'like', email, text: shortText, date: c.createdAt }));
                 if (c.dislikes) c.dislikes.forEach(email => historyItems.push({ type: 'dislike', email, text: shortText, date: c.createdAt }));
             });
-             historyItems.sort((a, b) => new Date(b.date) - new Date(a.date));
+            historyItems.sort((a, b) => new Date(b.date) - new Date(a.date));
 
             let freeDislikesShown = 0;
             let historyHtml = historyItems.map(item => {
@@ -226,13 +186,11 @@ export default (db) => {
 
             const historyContainer = `<div style="max-height: 250px; overflow-y: auto; padding-right: 5px;" class="custom-scrollbar">${historyHtml}</div>`;
 
-            // Рендер блока ресторанов
-            let restaurantsHtml = (pageData.restaurants || []).map(r => `
+             let restaurantsHtml = (pageData.restaurants || []).map(r => `
                 <div style="background: rgba(255,152,0,0.1); padding: 12px; margin-bottom: 10px; border-radius: 5px; border-left: 4px solid #ff9800; position: relative;">
                     ${getDeleteBtn('restaurant', r._id)}
                     <div style="font-size: 15px; margin-bottom: 5px; display: flex; justify-content: space-between; padding-right: 20px;">
-                        <b>${r.name}</b> 
-                        <span style="color:#ff9800; font-weight:bold; background:rgba(255,152,0,0.2); padding:2px 6px; border-radius:4px; font-size:12px;">${r.discount}</span>
+                        <b>${r.name}</b> <span style="color:#ff9800; font-weight:bold; background:rgba(255,152,0,0.2); padding:2px 6px; border-radius:4px; font-size:12px;">${r.discount}</span>
                     </div>
                     <div style="font-size: 13px; color: #ccc; margin-bottom: 8px;">${r.description}</div>
                     <div style="font-size: 12px; color: #aaa;">📞 Бронь: <span style="color:white;">${r.contact}</span></div>
@@ -241,8 +199,7 @@ export default (db) => {
 
             const restaurantsContainer = `<div style="max-height: 250px; overflow-y: auto; padding-right: 5px;" class="custom-scrollbar">${restaurantsHtml}</div>`;
 
-            // Рендер списка идей и пожеланий
-            let feedbacksHtml = (pageData.feedbacks || []).map(f => `
+             let feedbacksHtml = (pageData.feedbacks || []).map(f => `
                 <div style="background: rgba(255,255,255,0.1); padding: 10px; margin-bottom: 5px; border-radius: 5px; font-size: 13px; border-left: 3px solid #6cafff; position: relative;">
                     ${getDeleteBtn('feedback', f._id)}
                     <b style="color: #6cafff;">${f.contact}:</b> <span style="color:#eee; display: inline-block; padding-right: 20px;">${f.text}</span>
@@ -251,13 +208,18 @@ export default (db) => {
 
             const feedbackContainer = `<div style="max-height: 150px; overflow-y: auto; padding-right: 5px; margin-bottom: 15px;" class="custom-scrollbar">${feedbacksHtml}</div>`;
 
+            // 👇 НОВАЯ ЛОГИКА ДЛЯ СТАТУСОВ ГАЛЕРЕИ
             const renderGalleryItem = (t) => { 
                 let src = t.imageBase64 ? `data:${t.mimetype || 'image/jpeg'};base64,${t.imageBase64}` : `/uploads/${t.fileName}`;
-                 const content = `<img src="${src}" alt="${t.originalName}" loading="lazy">`;
+                const content = `<img src="${src}" alt="${t.originalName}" loading="lazy">`;
+                
                 let statusHtml = ''; 
                 if (t.amount && t.amount.trim() !== '') statusHtml = `<div class="status-label status-amount">${t.amount}</div>`;
                 else if (t.status === 'free') statusHtml = `<div class="status-label status-free">Свободна сегодня</div>`;
                 else if (t.status === 'company') statusHtml = `<div class="status-label status-company">Ждем компанию</div>`;
+                else if (t.status === 'alone') statusHtml = `<div class="status-label status-alone">Я одна (один)</div>`;
+                else if (t.status === 'want_cocktail') statusHtml = `<div class="status-label status-cocktail">Хочу коктейль 🍹</div>`;
+                else if (t.status === 'ride') statusHtml = `<div class="status-label status-ride">Прокатиться 🚗</div>`;
                 else statusHtml = `<div class="status-label status-busy">Временно занята</div>`;
                 
                 return `
@@ -307,41 +269,48 @@ export default (db) => {
                         body { font-family: Arial, sans-serif; background: url('/images/background.jpg') center/cover fixed; margin: 0; height: 100dvh; overflow-y: scroll; }
                         .page-section { min-height: 100dvh; width: 100%; scroll-snap-align: start; display: flex; justify-content: center; align-items: flex-start; padding-top: 40px; padding-bottom: 40px; box-sizing: border-box; position: relative; }
                       .second-page { background: rgba(0, 0, 0, 0.4); display: flex; flex-direction: column; justify-content: center; align-items: center; }
-                         .scroll-hint { position: absolute; bottom: 20px; color: white; font-size: 24px; animation: bounce 2s infinite; opacity: 0.7; z-index: 10; pointer-events: none;}
+                        .scroll-hint { position: absolute; bottom: 20px; color: white; font-size: 24px; animation: bounce 2s infinite; opacity: 0.7; z-index: 10; pointer-events: none;}
                         @keyframes bounce { 0%, 20%, 50%, 80%, 100% {transform: translateY(0);} 40% {transform: translateY(-10px);} 60% {transform: translateY(-5px);} }
                         .main-wrapper { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; max-width: 1200px; width: 100%; }
                         .block { background: rgba(0,0,0,0.7); color: white; padding: 20px; border-radius: 8px; width: 100%; max-width: 340px; margin-bottom: 20px; box-sizing: border-box; }
                         input, button { width: 100%; padding: 12px; margin-bottom: 10px; border-radius: 5px; box-sizing: border-box; font-size: 16px; } 
                       button { background: #007BFF; color: white; border: none; cursor: pointer; font-weight: bold;}
-                         .gallery-grid { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; } 
+                        .gallery-grid { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; } 
                         .gallery-wrapper { display: flex; flex-direction: column; align-items: center; width: 85px; cursor: pointer; transition: 0.2s; }
                         .gallery-wrapper:hover { transform: scale(1.05); }
                         .gallery-item { width: 85px; height: 85px; display: flex; justify-content: center; align-items: center; overflow: hidden; border-radius: 5px; background: rgba(255,255,255,0.1); }
                         .gallery-item img { width: 100%; height: 100%; object-fit: cover; }
                       .work-border { border: 2px solid orange; }
                       .status-label { font-size: 10px; text-align: center; margin-top: 4px; font-weight: bold; width: 100%; word-break: break-word; line-height: 1.2;}
-                        .status-free { color: #28a745; } .status-company { color: #ffc107; } .status-busy { color: #ccc; font-style: italic; } .status-amount { color: #00c3ff; font-size: 11px; }
+                        
+                        /* 👇 ЦВЕТА СТАТУСОВ */
+                        .status-free { color: #28a745; } 
+                        .status-company { color: #ffc107; } 
+                        .status-alone { color: #e056fd; } /* Фиолетовый */
+                        .status-cocktail { color: #00bcd4; } /* Бирюзовый */
+                        .status-ride { color: #ffeb3b; } /* Желтый */
+                        .status-busy { color: #ccc; font-style: italic; } 
+                        .status-amount { color: #00c3ff; font-size: 11px; }
 
                         .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 1000; justify-content: center; align-items: center; }
                         .modal { background: white; padding: 20px; border-radius: 10px; width: 90%; max-width: 400px; text-align: center; position: relative; max-height: 90vh; overflow-y: auto; }
                         .modal img { max-width: 100%; max-height: 30vh; border-radius: 5px; margin-bottom: 15px; object-fit: contain; }
                         .modal-buttons { display: flex; flex-direction: column; gap: 10px; justify-content: center; margin-top: 15px; } 
-                       .btn-view { background: #6c757d; color: white; padding: 12px 20px; text-decoration: none; border-radius: 5px; display: block; width: 100%; box-sizing: border-box; }
+                      .btn-view { background: #6c757d; color: white; padding: 12px 20px; text-decoration: none; border-radius: 5px; display: block; width: 100%; box-sizing: border-box; }
                         .btn-chat { background: #28a745; color: white; padding: 12px 20px; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; width: 100%; }
                         .close-modal { position: absolute; top: 10px; right: 15px; font-size: 30px; cursor: pointer; color: #333; font-weight: bold; z-index: 5;}
-                         #msg-form { display: none; margin-top: 15px; text-align: left; }
+                        #msg-form { display: none; margin-top: 15px; text-align: left; }
                         #msg-form textarea { width: 100%; height: 80px; margin-bottom: 10px; padding: 8px; box-sizing: border-box; border: 1px solid #ccc; font-size: 16px;}
                         #msg-form input { width: 100%; padding: 10px; margin-bottom: 10px; box-sizing: border-box; border: 1px solid #ccc; font-size: 16px;}
-                       a.link { color: #6cafff; display: block; text-align: center; margin-top: 10px; padding: 10px;}
+                      a.link { color: #6cafff; display: block; text-align: center; margin-top: 10px; padding: 10px;}
                         .new-activities-wrapper { display: flex; gap: 15px; flex-wrap: wrap; justify-content: center; max-width: 800px; width: 100%; }
                         .new-btn { display: inline-block; padding: 12px 25px; background: rgba(255,255,255,0.1); border: 2px solid white; color: white; text-decoration: none; border-radius: 30px; font-size: 1.1em; transition: 0.3s; margin: 5px; }
-                         .travel-link { font-family: 'Comic Sans MS', 'Brush Script MT', cursive; font-size: 1.8em; color: #ffeb3b; transform: rotate(-5deg); margin: 20px 0; text-shadow: 2px 2px 4px rgba(0,0,0,0.5); display: inline-block; text-decoration: none; text-align: center;}
+                        .travel-link { font-family: 'Comic Sans MS', 'Brush Script MT', cursive; font-size: 1.8em; color: #ffeb3b; transform: rotate(-5deg); margin: 20px 0; text-shadow: 2px 2px 4px rgba(0,0,0,0.5); display: inline-block; text-decoration: none; text-align: center;}
                       a.activity-btn { display: block; width: 100%; padding: 12px; margin-bottom: 10px; color: white; text-align: center; text-decoration: none; border-radius: 5px; box-sizing: border-box; font-weight: bold; border: 1px solid rgba(255,255,255,0.2); transition: 0.3s; }
                         .chess-btn { background-color: #6f42c1; } .foot-btn { background-color: #fd7e14; } .dance-btn { background-color: #e83e8c; }
                         .evening-link { display: block; margin-top: 30px; font-size: 1.3em; color: #d4af37; text-decoration: none; border: 2px solid #d4af37; padding: 10px 20px; border-radius: 10px; transition: 0.3s; background: rgba(0,0,0,0.5); text-align: center;}
                         
-                        /* Стили для скроллбара внутри истории и ресторанов */
-                        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+                         .custom-scrollbar::-webkit-scrollbar { width: 6px; }
                         .custom-scrollbar::-webkit-scrollbar-track { background: rgba(255,255,255,0.1); border-radius: 5px; }
                         .custom-scrollbar::-webkit-scrollbar-thumb { background: #888; border-radius: 5px; }
                         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #555; }
@@ -363,11 +332,11 @@ export default (db) => {
                             <span class="close-modal" onclick="closeModal('photoModal')">&times;</span>
                             <h3 id="modalTitle" style="margin-top:0; color:black;">Фото</h3>
                             <img id="modalImg" src="">
-                             <div id="actionButtons" class="modal-buttons">
+                            <div id="actionButtons" class="modal-buttons">
                                 <a id="viewLink" href="#" target="_blank" class="btn-view">👁️ Просто посмотреть</a>
                                 <button onclick="showChatForm()" class="btn-chat">💬 Написать сообщение</button>
                             </div>
-                             <div id="msg-form">
+                            <div id="msg-form">
                                 <label style="color:black; font-weight:bold;">Ваш контакт:</label>
                                 <input type="text" id="contactInfo" placeholder="Email или телефон..." value="${currentUser ? (currentUser.phone || currentUser.email) : ''}">
                                 <label style="color:black; font-weight:bold;">Сообщение:</label>
@@ -382,16 +351,16 @@ export default (db) => {
                             <span class="close-modal" onclick="closeModal('restaurantModal')">&times;</span>
                             <h3 style="margin-top:0; color:black;">Предложить ресторан</h3>
                             <form action="/add-restaurant" method="POST" style="text-align:left;">
-                                 <input type="hidden" name="_csrf" value="${res.locals.csrfToken}">
+                                <input type="hidden" name="_csrf" value="${res.locals.csrfToken}">
                                 <label style="color:black; font-weight:bold; font-size:14px;">Название заведения:</label>
                                 <input type="text" name="name" required placeholder="Например: Мята Lounge" style="border:1px solid #ccc; color:black;">
-                                 <label style="color:black; font-weight:bold; font-size:14px;">Скидка / Акция:</label>
+                                <label style="color:black; font-weight:bold; font-size:14px;">Скидка / Акция:</label>
                                 <input type="text" name="discount" required placeholder="Например: Скидка 20% на бар" style="border:1px solid #ccc; color:black;">
-                                 <label style="color:black; font-weight:bold; font-size:14px;">Описание (коротко):</label>
-                                 <textarea name="description" required placeholder="Уютная атмосфера, живая музыка..." style="width: 100%; height: 60px; margin-bottom: 10px; padding: 8px; box-sizing: border-box; border: 1px solid #ccc; font-size: 14px;"></textarea>
+                                <label style="color:black; font-weight:bold; font-size:14px;">Описание (коротко):</label>
+                                <textarea name="description" required placeholder="Уютная атмосфера, живая музыка..." style="width: 100%; height: 60px; margin-bottom: 10px; padding: 8px; box-sizing: border-box; border: 1px solid #ccc; font-size: 14px;"></textarea>
                                 <label style="color:black; font-weight:bold; font-size:14px;">Ваш контакт (бронь):</label>
                                 <input type="text" name="contact" required placeholder="Телефон или Telegram" value="${currentUser ? (currentUser.phone || currentUser.email) : ''}" style="border:1px solid #ccc; color:black;">
-                                 <button type="submit" style="background:#ff9800; margin-top:10px;">Опубликовать предложение</button>
+                                <button type="submit" style="background:#ff9800; margin-top:10px;">Опубликовать предложение</button>
                             </form>
                         </div>
                     </div>
@@ -402,7 +371,7 @@ export default (db) => {
                             <div class="block">
                                 <h3 style="color: #6cafff; margin-top:0;">💡 Идеи и пожелания</h3>
                                 <p style="font-size: 12px; color: #ccc; margin-top: -10px;">Как нам улучшить сайт?</p>
-                                 ${feedbackContainer}
+                                ${feedbackContainer}
                                 <form action="/submit-feedback" method="POST" style="margin:0;">
                                     <input type="hidden" name="_csrf" value="${res.locals.csrfToken}">
                                     <input type="text" name="contactInfo" placeholder="Ваше имя/контакт" value="${currentUser ? (currentUser.name || currentUser.email) : ''}" required style="padding: 8px; font-size: 14px;">
@@ -456,7 +425,7 @@ export default (db) => {
                             <a href="/activities/Волейбол" class="new-btn">🏐 Волейбол (${pageData.volleyCount})</a>
                             <a href="/activities/Походы" class="new-btn">🥾 Походы (${pageData.hikingCount})</a>
                         </div>
-                         <div style="margin-top: 30px; text-align:center; width: 100%;">
+                        <div style="margin-top: 30px; text-align:center; width: 100%;">
                             <a href="/activities/Путешествие" class="travel-link">✈️ Путешествие с тобой... (${pageData.travelCount})</a><br>
                             <a href="/evening" class="evening-link">🌙 После 19:00... <br>Кто что предложит?</a>
                         </div>
