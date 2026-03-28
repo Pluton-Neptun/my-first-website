@@ -107,7 +107,7 @@ export default (db) => {
                     <h3>Для души</h3>
                     ${renderCard("Путешествие", counts.travel, "✈️ Путешествие с тобой")}
                     
-                    <a href="/profile" class="back-link">⬅ Вернуться в профиль</a>
+                    <a href="/" class="back-link">⬅ Вернуться на главную</a>
                 </div></body></html>
             `);
         } catch(error) { console.error(error); res.status(500).send("Ошибка."); }
