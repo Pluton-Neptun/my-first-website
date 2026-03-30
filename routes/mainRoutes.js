@@ -33,8 +33,7 @@ export default (db) => {
         } catch (err) { console.error(err); res.status(500).json({ error: 'Ошибка при удалении' }); }
     });
 
-    // 👇 ИСПРАВЛЕНИЕ: Бэкенд теперь жестко требует авторизацию для отправки сообщения
-    router.post('/send-message', async (req, res) => {
+    router.post('/send-message', async (req, res) => { 
         if (!req.session || !req.session.user) {
             return res.status(401).json({ error: 'Нужна авторизация' });
         }
@@ -51,8 +50,7 @@ export default (db) => {
             }
 
             if (!receiverId) return res.status(400).json({ error: 'Не найден получатель' });
-
-            // Берем контакт из формы, а если его нет - из сессии пользователя
+ 
             const senderContact = contactInfo || req.session.user.phone || req.session.user.name;
 
             await db.collection('messages').insertOne({
@@ -128,9 +126,6 @@ export default (db) => {
             const currentUser = req.session && req.session.user ? req.session.user : null;
             const isAdmin = currentUser && currentUser.email === ADMIN_EMAIL;
             
-            let activityCounts = {};
-            try { activityCounts = await checkLimitsAndGetCounts(db); } catch (err) { console.error(err); }
-
             let pageData = await getCache(LOGIN_PAGE_CACHE_KEY); 
             
             if (!pageData || !pageData.restaurants || !pageData.feedbacks) {
@@ -141,15 +136,7 @@ export default (db) => {
                 pageData = { comments, tasks, restaurants, feedbacks }; 
                 await setCache(LOGIN_PAGE_CACHE_KEY, pageData); 
             }
-
-            pageData.chessCount = activityCounts["Шахматы"] || 0;
-            pageData.footballCount = activityCounts["Футбол"] || 0;
-            pageData.danceCount = activityCounts["Танцы"] || 0;
-            pageData.hockeyCount = activityCounts["Хоккей"] || 0;
-            pageData.volleyCount = activityCounts["Волейбол"] || 0;
-            pageData.hikingCount = activityCounts["Походы"] || 0;
-            pageData.travelCount = activityCounts["Путешествие"] || 0;
- 
+  
             const getDeleteBtn = (type, id) => {
                 if (!isAdmin) return '';
                 return `<span onclick="adminDelete('${type}', '${id}', this)" style="background: red; color: white; padding: 2px 5px; font-size: 10px; border-radius: 3px; cursor: pointer; margin-left: 8px; user-select: none; position: relative; top: -1px;" title="Удалить">❌</span>`;
@@ -319,6 +306,10 @@ export default (db) => {
                         .custom-scrollbar::-webkit-scrollbar-thumb { background: #888; border-radius: 5px; }
                         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #555; }
 
+                        /* Стили для смайлов */
+                        .emoji-picker span { transition: transform 0.2s; display: inline-block; }
+                        .emoji-picker span:hover { transform: scale(1.3); }
+
                         @media (max-width: 600px) {
                             .page-section { padding-top: 20px; display: block; height: auto; min-height: 100dvh; }
                             .main-wrapper { flex-direction: column; align-items: center; padding-bottom: 60px; }
@@ -385,7 +376,18 @@ export default (db) => {
                                 <form action="/submit-feedback" method="POST" style="margin:0;">
                                     <input type="hidden" name="_csrf" value="${res.locals.csrfToken}">
                                     <input type="text" name="contactInfo" placeholder="Ваше имя/контакт" value="${currentUser ? (currentUser.name || currentUser.email) : ''}" required style="padding: 8px; font-size: 14px;">
-                                    <textarea name="feedbackText" placeholder="Напишите вашу идею..." required style="width: 100%; height: 50px; margin-bottom: 10px; padding: 8px; box-sizing: border-box; border-radius: 5px; font-size: 14px; resize: none;"></textarea>
+                                    
+                                    <div class="emoji-picker" style="margin: 5px 0; font-size: 22px; text-align: center; user-select: none;">
+                                        <span onclick="addEmoji('👍')" style="cursor:pointer; margin: 0 4px;">👍</span>
+                                        <span onclick="addEmoji('🔥')" style="cursor:pointer; margin: 0 4px;">🔥</span>
+                                        <span onclick="addEmoji('💡')" style="cursor:pointer; margin: 0 4px;">💡</span>
+                                        <span onclick="addEmoji('😍')" style="cursor:pointer; margin: 0 4px;">😍</span>
+                                        <span onclick="addEmoji('🚀')" style="cursor:pointer; margin: 0 4px;">🚀</span>
+                                        <span onclick="addEmoji('😂')" style="cursor:pointer; margin: 0 4px;">😂</span>
+                                        <span onclick="addEmoji('🤝')" style="cursor:pointer; margin: 0 4px;">🤝</span>
+                                    </div>
+                                    
+                                    <textarea id="feedbackInput" name="feedbackText" placeholder="Напишите вашу идею..." required style="width: 100%; height: 50px; margin-bottom: 10px; padding: 8px; box-sizing: border-box; border-radius: 5px; font-size: 14px; resize: none;"></textarea>
                                     <button type="submit" style="background:#007BFF; padding: 10px; font-size: 14px;">Отправить идею</button>
                                 </form>
                             </div>
@@ -394,9 +396,9 @@ export default (db) => {
                                 ${authBlockHtml}
                                 <hr>
                                 <h3>Активности:</h3>
-                                <a href="/activities/Шахматы" class="activity-btn chess-btn">♟️ Шахматы (${pageData.chessCount})</a>
-                                <a href="/activities/Футбол" class="activity-btn foot-btn">⚽ Футбол (${pageData.footballCount})</a>
-                                <a href="/activities/Танцы" class="activity-btn dance-btn">💃 Танцы (${pageData.danceCount})</a>
+                                <a href="/activities/Шахматы" class="activity-btn chess-btn">♟️ Шахматы</a>
+                                <a href="/activities/Футбол" class="activity-btn foot-btn">⚽ Футбол</a>
+                                <a href="/activities/Танцы" class="activity-btn dance-btn">💃 Танцы</a>
                             </div>
                             
                             <div class="block">
@@ -431,18 +433,27 @@ export default (db) => {
                     <div class="page-section second-page">
                         <h2 style="color:white; margin-bottom:30px; text-align:center;">Активный отдых</h2>
                         <div class="new-activities-wrapper">
-                            <a href="/activities/Хоккей" class="new-btn">🏒 Хоккей (${pageData.hockeyCount})</a>
-                            <a href="/activities/Волейбол" class="new-btn">🏐 Волейбол (${pageData.volleyCount})</a>
-                            <a href="/activities/Походы" class="new-btn">🥾 Походы (${pageData.hikingCount})</a>
+                            <a href="/activities/Хоккей" class="new-btn">🏒 Хоккей</a>
+                            <a href="/activities/Волейбол" class="new-btn">🏐 Волейбол</a>
+                            <a href="/activities/Походы" class="new-btn">🥾 Походы</a>
                         </div>
                         <div style="margin-top: 30px; text-align:center; width: 100%;">
-                            <a href="/activities/Путешествие" class="travel-link">✈️ Путешествие с тобой... (${pageData.travelCount})</a><br>
+                            <a href="/activities/Путешествие" class="travel-link">✈️ Путешествие с тобой...</a><br>
                             <a href="/evening" class="evening-link">🌙 После 19:00... <br>Кто что предложит?</a>
                         </div>
                     </div>
 
                     <script>
                         let currentToUserId = ''; let currentImageId = '';
+
+                        // Функция для вставки смайлов в текст пожеланий
+                        function addEmoji(emoji) {
+                            const input = document.getElementById('feedbackInput');
+                            if (input) {
+                                input.value += emoji;
+                                input.focus();
+                            }
+                        }
 
                         async function adminDelete(type, id, btn) { 
                             if (!confirm('Точно удалить этот контент?')) return;
@@ -465,8 +476,7 @@ export default (db) => {
                             document.getElementById('modalTitle').innerText = title;
                             document.getElementById('viewLink').href = url;
                             
-                            // Возвращаем кнопки в исходное состояние при открытии новой фотки
-                            document.getElementById('actionButtons').style.display = 'flex';
+                             document.getElementById('actionButtons').style.display = 'flex';
                             document.getElementById('msg-form').style.display = 'none';
                             document.getElementById('messageText').value = '';
                             
