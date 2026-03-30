@@ -8,32 +8,33 @@ function isImage(filename) { return filename && filename.match(/\.(jpg|jpeg|png|
 export default (db) => {
     const router = express.Router();
 
-    // 👇 ВПИШИ СЮДА СВОЙ EMAIL, ЧТОБЫ САЙТ ПОНЯЛ, ЧТО ТЫ АДМИН
-    const ADMIN_EMAIL = 'tin@mail.ru'; // <--- ИЗМЕНИ НА СВОЮ ПОЧТУ
+    // 👇 ВПИШИ СЮДА СВОЙ EMAIL (АДМИН)
+    const ADMIN_EMAIL = 'твой@email.com'; // <--- ИЗМЕНИ НА СВОЮ ПОЧТУ
 
-    router.get('/clear-cache-now', async (req, res) => { 
+    router.get('/clear-cache-now', async (req, res) => {
         try {
             await clearCache(LOGIN_PAGE_CACHE_KEY);
             res.send('<h2 style="color: green; text-align: center; margin-top: 50px;">✅ Кэш Redis успешно сброшен!</h2><div style="text-align: center;"><a href="/" style="font-size: 20px;">Вернуться на главную</a></div>');
         } catch (error) { res.send('Ошибка: ' + error.message); }
     });
 
-    router.post('/admin-delete', async (req, res) => { 
+    // 👇 ТЕПЕРЬ УДАЛЕНИЕ РАБОТАЕТ В ФОНЕ (AJAX) БЕЗ ПЕРЕЗАГРУЗКИ СТРАНИЦЫ
+    router.post('/admin-delete', async (req, res) => {
         if (!req.session || !req.session.user || req.session.user.email !== ADMIN_EMAIL) {
-            return res.status(403).send('У вас нет прав для удаления');
+            return res.status(403).json({ error: 'У вас нет прав для удаления' });
         }
-        try { 
+        try {
             const { type, id } = req.body;
             if (type === 'comment') await db.collection('comments').deleteOne({ _id: new ObjectId(id) });
             else if (type === 'feedback') await db.collection('feedback').deleteOne({ _id: new ObjectId(id) });
             else if (type === 'restaurant') await db.collection('restaurants').deleteOne({ _id: new ObjectId(id) });
 
             await clearCache(LOGIN_PAGE_CACHE_KEY);
-            res.redirect('/');
-        } catch (err) { console.error(err); res.status(500).send('Ошибка при удалении'); }
+            res.json({ status: 'ok' }); // Возвращаем OK вместо перезагрузки страницы
+        } catch (err) { console.error(err); res.status(500).json({ error: 'Ошибка при удалении' }); }
     });
 
-    router.post('/send-message', async (req, res) => { 
+    router.post('/send-message', async (req, res) => {
         try {
             const { toUserId, imageId, messageText, contactInfo, source } = req.body;
             let receiverId; 
@@ -59,7 +60,7 @@ export default (db) => {
         } catch (error) { console.error(error); res.status(500).json({ error: 'Ошибка отправки' }); }
     });
 
-    router.post('/vote-comment', async (req, res) => { 
+    router.post('/vote-comment', async (req, res) => {
         if (!req.session || !req.session.user) return res.status(401).json({ error: 'Нужна авторизация' });
         try {
             const { commentId, type } = req.body;
@@ -84,7 +85,7 @@ export default (db) => {
         } catch (err) { console.error(err); res.status(500).json({ error: 'Ошибка сервера' }); }
     });
 
-    router.post('/add-restaurant', async (req, res) => { 
+    router.post('/add-restaurant', async (req, res) => {
         if (!req.session || !req.session.user) return res.status(401).send('Нужна авторизация');
         try {
             await db.collection('restaurants').insertOne({
@@ -96,7 +97,7 @@ export default (db) => {
         } catch (e) { console.error(e); res.status(500).send("Ошибка при добавлении ресторана"); }
     });
 
-    router.post('/submit-feedback', async (req, res) => { 
+    router.post('/submit-feedback', async (req, res) => {
         try {
             const { feedbackText, contactInfo } = req.body;
             if (feedbackText && feedbackText.trim() !== '') {
@@ -113,7 +114,7 @@ export default (db) => {
             res.set('Cache-Control', 'public, max-age=0, must-revalidate'); 
             
             const currentUser = req.session && req.session.user ? req.session.user : null;
-             const isAdmin = currentUser && currentUser.email === ADMIN_EMAIL;
+            const isAdmin = currentUser && currentUser.email === ADMIN_EMAIL;
             
             let activityCounts = {};
             try { activityCounts = await checkLimitsAndGetCounts(db); } catch (err) { console.error(err); }
@@ -137,18 +138,14 @@ export default (db) => {
             pageData.hikingCount = activityCounts["Походы"] || 0;
             pageData.travelCount = activityCounts["Путешествие"] || 0;
  
-            const getDeleteBtn = (type, id) => { 
+            // Изменили кнопку удаления на вызов JS функции
+            const getDeleteBtn = (type, id) => {
                 if (!isAdmin) return '';
                 return `
-                <form action="/admin-delete" method="POST" style="position: absolute; right: 5px; top: 5px; margin: 0; z-index: 10;">
-                    <input type="hidden" name="_csrf" value="${res.locals.csrfToken}">
-                    <input type="hidden" name="type" value="${type}">
-                    <input type="hidden" name="id" value="${id}">
-                    <button type="submit" style="background: red; color: white; border: none; padding: 2px 5px; font-size: 10px; width: auto; border-radius: 3px; cursor: pointer;" onclick="return confirm('Точно удалить?')">❌</button>
-                </form>`;
+                <button onclick="adminDelete('${type}', '${id}', this)" style="position: absolute; right: 5px; top: 5px; z-index: 10; background: red; color: white; border: none; padding: 2px 6px; font-size: 12px; border-radius: 3px; cursor: pointer;" title="Удалить">❌</button>`;
             };
 
-             let commentsHtml = pageData.comments.map(c => {
+            let commentsHtml = pageData.comments.map(c => {
                 const likesCount = c.likes ? c.likes.length : 0;
                 const dislikesCount = c.dislikes ? c.dislikes.length : 0;
                 return `
@@ -162,7 +159,7 @@ export default (db) => {
                 </div>`;
             }).join('');
 
-            let historyItems = []; 
+            let historyItems = [];
             pageData.comments.forEach(c => {
                 const shortText = c.text.length > 25 ? c.text.substring(0, 25) + '...' : c.text;
                 if (c.likes) c.likes.forEach(email => historyItems.push({ type: 'like', email, text: shortText, date: c.createdAt }));
@@ -186,7 +183,7 @@ export default (db) => {
 
             const historyContainer = `<div style="max-height: 250px; overflow-y: auto; padding-right: 5px;" class="custom-scrollbar">${historyHtml}</div>`;
 
-             let restaurantsHtml = (pageData.restaurants || []).map(r => `
+            let restaurantsHtml = (pageData.restaurants || []).map(r => `
                 <div style="background: rgba(255,152,0,0.1); padding: 12px; margin-bottom: 10px; border-radius: 5px; border-left: 4px solid #ff9800; position: relative;">
                     ${getDeleteBtn('restaurant', r._id)}
                     <div style="font-size: 15px; margin-bottom: 5px; display: flex; justify-content: space-between; padding-right: 20px;">
@@ -199,7 +196,7 @@ export default (db) => {
 
             const restaurantsContainer = `<div style="max-height: 250px; overflow-y: auto; padding-right: 5px;" class="custom-scrollbar">${restaurantsHtml}</div>`;
 
-             let feedbacksHtml = (pageData.feedbacks || []).map(f => `
+            let feedbacksHtml = (pageData.feedbacks || []).map(f => `
                 <div style="background: rgba(255,255,255,0.1); padding: 10px; margin-bottom: 5px; border-radius: 5px; font-size: 13px; border-left: 3px solid #6cafff; position: relative;">
                     ${getDeleteBtn('feedback', f._id)}
                     <b style="color: #6cafff;">${f.contact}:</b> <span style="color:#eee; display: inline-block; padding-right: 20px;">${f.text}</span>
@@ -208,8 +205,7 @@ export default (db) => {
 
             const feedbackContainer = `<div style="max-height: 150px; overflow-y: auto; padding-right: 5px; margin-bottom: 15px;" class="custom-scrollbar">${feedbacksHtml}</div>`;
 
-            // 👇 НОВАЯ ЛОГИКА ДЛЯ СТАТУСОВ ГАЛЕРЕИ
-            const renderGalleryItem = (t) => { 
+            const renderGalleryItem = (t) => {  
                 let src = t.imageBase64 ? `data:${t.mimetype || 'image/jpeg'};base64,${t.imageBase64}` : `/uploads/${t.fileName}`;
                 const content = `<img src="${src}" alt="${t.originalName}" loading="lazy">`;
                 
@@ -283,12 +279,11 @@ export default (db) => {
                       .work-border { border: 2px solid orange; }
                       .status-label { font-size: 10px; text-align: center; margin-top: 4px; font-weight: bold; width: 100%; word-break: break-word; line-height: 1.2;}
                         
-                        /* 👇 ЦВЕТА СТАТУСОВ */
-                        .status-free { color: #28a745; } 
+                        .status-free { color: #28a745; }  
                         .status-company { color: #ffc107; } 
-                        .status-alone { color: #e056fd; } /* Фиолетовый */
-                        .status-cocktail { color: #00bcd4; } /* Бирюзовый */
-                        .status-ride { color: #ffeb3b; } /* Желтый */
+                        .status-alone { color: #e056fd; } 
+                        .status-cocktail { color: #00bcd4; } 
+                        .status-ride { color: #ffeb3b; } 
                         .status-busy { color: #ccc; font-style: italic; } 
                         .status-amount { color: #00c3ff; font-size: 11px; }
 
@@ -310,7 +305,7 @@ export default (db) => {
                         .chess-btn { background-color: #6f42c1; } .foot-btn { background-color: #fd7e14; } .dance-btn { background-color: #e83e8c; }
                         .evening-link { display: block; margin-top: 30px; font-size: 1.3em; color: #d4af37; text-decoration: none; border: 2px solid #d4af37; padding: 10px 20px; border-radius: 10px; transition: 0.3s; background: rgba(0,0,0,0.5); text-align: center;}
                         
-                         .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+                        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
                         .custom-scrollbar::-webkit-scrollbar-track { background: rgba(255,255,255,0.1); border-radius: 5px; }
                         .custom-scrollbar::-webkit-scrollbar-thumb { background: #888; border-radius: 5px; }
                         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #555; }
@@ -433,6 +428,23 @@ export default (db) => {
 
                     <script>
                         let currentToUserId = ''; let currentImageId = '';
+
+                        // 👇 СКРИПТ АДМИНСКОГО УДАЛЕНИЯ (БЕЗ ПЕРЕЗАГРУЗКИ)
+                        async function adminDelete(type, id, btn) {
+                            if (!confirm('Точно удалить этот контент?')) return;
+                            const res = await fetch('/admin-delete', {
+                                method: 'POST',
+                                headers: {'Content-Type': 'application/json', 'x-csrf-token': "${res.locals.csrfToken}"},
+                                body: JSON.stringify({ type, id })
+                            });
+                            if (res.ok) {
+                                // Просто стираем блок с экрана
+                                const element = btn.closest('.comment') || btn.closest('div[style*="position: relative"]');
+                                if (element) element.remove();
+                            } else {
+                                alert('Произошла ошибка при удалении.');
+                            }
+                        }
 
                         function openModal(id, userId, url, title) {
                             document.getElementById('photoModal').style.display = 'flex';

@@ -11,7 +11,7 @@ export default (db) => {
     const router = express.Router();
 
     // ------------------------------------------
-    // 1. СПИСОК ВСЕХ АКТИВНОСТЕЙ
+    // 1. СПИСОК ВСЕХ АКТИВНОСТЕЙ (ДЛЯ ЛИЧНОГО КАБИНЕТА)
     // ------------------------------------------
     router.get("/", requireLogin, async (req, res) => {
         try {
@@ -62,7 +62,7 @@ export default (db) => {
             };
 
             res.send(` 
-                <!DOCTYPE html><html lang="ru"><head><meta charset="UTF-8"><title>Активности</title>
+                <!DOCTYPE html><html lang="ru"><head><meta charset="UTF-8"><title>Мои активности</title>
                 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
                 <style>
                     body { font-family: Arial, sans-serif; padding: 10px; background-color: #f4f6f9; margin: 0; color: #333; }
@@ -87,8 +87,7 @@ export default (db) => {
                     a.btn-back-smart { background: #6c757d; }
                     a.btn-home { background: #007BFF; }
                     
-                    /* МОБИЛЬНАЯ АДАПТАЦИЯ */
-                    @media (max-width: 600px) {
+                    @media (max-width: 600px) { 
                         .activity-card { padding: 15px; }
                         .activity-header { flex-direction: column; align-items: flex-start; gap: 10px; }
                         .activity-title { font-size: 1.4em; }
@@ -98,7 +97,7 @@ export default (db) => {
                     }
                 </style></head><body>
                 <div class="tab-container">
-                    <h2>Доступные активности</h2>
+                    <h2>Управление активностями</h2>
                     
                     <h3>Основные</h3>
                     ${renderCard("Шахматы", counts.chess, "♟️ Шахматы")}
@@ -114,42 +113,31 @@ export default (db) => {
                     ${renderCard("Путешествие", counts.travel, "✈️ Путешествие с тобой")}
                     
                     <div class="nav-buttons">
-                        <a href="javascript:history.back()" class="back-link btn-back-smart">⬅ Назад</a>
+                        <a href="/profile" class="back-link btn-back-smart">👤 В кабинет</a>
                         <a href="/" class="back-link btn-home">🏠 На главную</a>
                     </div>
                 </div>
                 
                 <script>
-                    // Функция фоновой записи без порчи истории браузера
-                    async function updateActivity(e, name) {
+                    async function updateActivity(e, name) { 
                         e.preventDefault();
                         const form = e.target;
                         const action = form.action.value;
                         const limit = form.limit ? form.limit.value : '';
                         
-                        // Делаем кнопку полупрозрачной во время загрузки
-                        const btn = form.querySelector('button');
+                        const btn = form.querySelector('button'); 
                         btn.disabled = true;
                         btn.style.opacity = '0.7';
                         btn.innerText = 'Секунду...';
 
                         const res = await fetch('/activities/update', {
                             method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'x-csrf-token': '${res.locals.csrfToken}'
-                            },
+                            headers: { 'Content-Type': 'application/json', 'x-csrf-token': '${res.locals.csrfToken}' },
                             body: JSON.stringify({ activity: name, action: action, limit: limit })
                         });
 
-                        if(res.ok) {
-                            // Перезагружаем страницу, заменяя текущий кадр в истории
-                            window.location.replace(window.location.href);
-                        } else {
-                            alert('Произошла ошибка обновления');
-                            btn.disabled = false;
-                            btn.style.opacity = '1';
-                        }
+                        if(res.ok) window.location.replace(window.location.href);
+                        else { alert('Произошла ошибка'); btn.disabled = false; btn.style.opacity = '1'; }
                     }
                 </script>
                 </body></html>
@@ -168,8 +156,7 @@ export default (db) => {
             if(action === "join") await addUserActivity(db, uid, activity, limit);
             else await removeUserActivity(db, uid, activity);
             
-            // Теперь отправляем просто статус "Ок" вместо редиректа
-            res.json({ status: 'ok' }); 
+            res.json({ status: 'ok' });  
         } catch (e) {
             console.error(e);
             res.status(500).json({ error: "Ошибка обновления активности" });
@@ -177,16 +164,22 @@ export default (db) => {
     });
 
     // ------------------------------------------
-    // 3. ПРОСМОТР УЧАСТНИКОВ (С МОБИЛЬНОЙ АДАПТАЦИЕЙ)
+    // 3. ПРОСМОТР КОНКРЕТНОЙ АКТИВНОСТИ (С КНОПКАМИ СВЕРХУ)
     // ------------------------------------------
-    router.get('/:activityName', async (req, res) => {
+    router.get('/:activityName', requireLogin, async (req, res) => {
         try {
-            const activityName = req.params.activityName;
-            
+            const activityName = req.params.activityName; 
             if (['favicon.ico', 'update', 'css', 'js', 'sitemap.xml'].includes(activityName)) return res.status(404).send('Not found');
 
             const safeCsrf = res.locals.csrfToken || ''; 
+            const uid = req.session.user._id;
+            
+            // Проверяем, записан ли текущий пользователь
+            const currentUser = await db.collection("users").findOne({ _id: ObjectId.createFromHexString(uid) });
+            const userActivities = currentUser ? (currentUser.activities || []) : [];
+            const isJoined = userActivities.some(a => a === activityName || (a && a.name === activityName));
 
+            // Ищем всех участников
             const participants = await db.collection('users').find({ 
                 $or: [
                     { activities: activityName },
@@ -226,6 +219,13 @@ export default (db) => {
                 <style>
                     body{font-family:Arial,sans-serif;padding:15px;background:#eee;max-width:800px;margin:auto;}
                     h1{text-align:center; color:#333; margin-bottom:20px;}
+                    
+                    .my-panel { background: white; padding: 20px; border-radius: 10px; margin-bottom: 30px; border: 2px solid #007BFF; box-shadow: 0 4px 15px rgba(0,123,255,0.2); text-align: center; }
+                    .limit-box { margin-bottom: 15px; font-size: 16px; color: #555; }
+                    .limit-box input { width: 70px; padding: 10px; border: 1px solid #ccc; border-radius: 5px; font-size: 16px; margin-left: 5px; text-align: center; }
+                    .btn-join { background-color: #28a745; color: white; padding: 15px; width: 100%; border: none; border-radius: 8px; font-size: 18px; font-weight: bold; cursor: pointer; }
+                    .btn-leave { background-color: #dc3545; color: white; padding: 15px; width: 100%; border: none; border-radius: 8px; font-size: 18px; font-weight: bold; cursor: pointer; }
+                    
                     .card{background:white;padding:20px;margin-bottom:20px;border-radius:10px;box-shadow:0 3px 10px rgba(0,0,0,0.1)}
                     .card-title{font-weight:bold; font-size:1.3em; margin-bottom:10px; display:flex; flex-wrap:wrap; gap:10px; align-items:center;}
                     .card-info{color:#555; font-size:1.1em; margin-bottom:5px;}
@@ -235,19 +235,69 @@ export default (db) => {
                     .msg-form textarea{height:80px; resize:vertical;}
                     .msg-form button{width:100%; padding:15px; background:#007BFF; color:white; border:none; cursor:pointer; border-radius:5px; font-size:16px; font-weight:bold;}
                     
-                    a.back-btn{display:block;text-align:center;margin-top:30px;padding:15px;background:#6c757d;color:white;text-decoration:none;border-radius:8px; font-weight:bold; font-size:16px;}
+                    .nav-buttons { display: flex; gap: 10px; margin-top: 30px; }
+                    a.back-btn{ flex: 1; display:block;text-align:center;padding:15px;color:white;text-decoration:none;border-radius:8px; font-weight:bold; font-size:16px; box-sizing: border-box;}
+                    .btn-smart { background: #6c757d; }
+                    .btn-home { background: #007BFF; }
                     
                     @media (max-width: 600px) {
                         body { padding: 10px; }
                         .card { padding: 15px; }
                         .card-title { font-size: 1.2em; flex-direction: column; align-items: flex-start; gap: 5px; }
+                        .nav-buttons { flex-direction: column; }
                     }
                 </style></head><body>
+                
                 <h1>${activityName}</h1>
+
+                <div class="my-panel">
+                    <h2 style="margin-top:0; color: #333;">Ваш статус</h2>
+                    <form onsubmit="updateMyStatus(event, '${activityName}')">
+                        ${isJoined ? 
+                            `<p style="color: #28a745; font-weight: bold;">✅ Вы участвуете в этой группе</p>
+                             <input type="hidden" name="action" value="leave">
+                             <button type="submit" class="btn-leave">Отписаться</button>`
+                            :
+                            `<input type="hidden" name="action" value="join">
+                             <div class="limit-box">
+                                 <label>Хочу найти до: <input type="number" name="limit" placeholder="∞"></label> чел.
+                             </div>
+                             <button type="submit" class="btn-join">Записаться</button>`
+                        }
+                    </form>
+                </div>
+
+                <hr style="border: 0; border-top: 2px solid #ccc; margin-bottom: 20px;">
+                <h2 style="text-align: center; color: #555;">Участники:</h2>
+
                 ${html}
-                <a href="javascript:history.back()" class="back-btn">⬅ Назад</a>
+                
+                <div class="nav-buttons">
+                    <a href="javascript:history.back()" class="back-btn btn-smart">⬅ Назад</a>
+                    <a href="/" class="back-btn btn-home">🏠 На главную</a>
+                </div>
                 
                 <script>
+                    async function updateMyStatus(e, name) {
+                        e.preventDefault();
+                        const form = e.target;
+                        const action = form.action.value;
+                        const limit = form.limit ? form.limit.value : '';
+                        
+                        const btn = form.querySelector('button');
+                        btn.disabled = true;
+                        btn.innerText = 'Обновление...';
+
+                        const res = await fetch('/activities/update', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', 'x-csrf-token': '${safeCsrf}' },
+                            body: JSON.stringify({ activity: name, action: action, limit: limit })
+                        });
+
+                        if(res.ok) window.location.reload();
+                        else { alert('Произошла ошибка'); btn.disabled = false; }
+                    }
+
                     async function sendActivityMessage(e,t){
                         e.preventDefault();
                         const btn = e.target.querySelector('button');
