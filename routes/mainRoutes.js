@@ -9,7 +9,7 @@ export default (db) => {
     const router = express.Router();
 
     // 👇 ВПИШИ СЮДА СВОЙ EMAIL (АДМИН)
-    const ADMIN_EMAIL = 'твой@email.com'; // <--- ИЗМЕНИ НА СВОЮ ПОЧТУ
+    const ADMIN_EMAIL = 'tin@mail.ru'; // <--- ИЗМЕНИ НА СВОЮ ПОЧТУ
 
     router.get('/clear-cache-now', async (req, res) => {
         try {
