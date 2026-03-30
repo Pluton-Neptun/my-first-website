@@ -12,6 +12,7 @@ export default (db) => {
 
     // ------------------------------------------
     // 1. СПИСОК ВСЕХ АКТИВНОСТЕЙ (ДЛЯ ЛИЧНОГО КАБИНЕТА)
+    // Здесь оставляем "крутилки" (лимит), так как это кабинет настройки
     // ------------------------------------------
     router.get("/", requireLogin, async (req, res) => {
         try {
@@ -84,7 +85,7 @@ export default (db) => {
                     
                     .nav-buttons { display: flex; gap: 10px; margin-top: 30px; }
                     a.back-link { flex: 1; display: block; color: white; text-align: center; padding: 15px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px; box-sizing: border-box;}
-                    a.btn-back-smart { background: #6c757d; } 
+                    a.btn-back-smart { background: #6c757d; }
                     
                     @media (max-width: 600px) { 
                         .activity-card { padding: 15px; }
@@ -113,7 +114,7 @@ export default (db) => {
                     
                     <div class="nav-buttons">
                         <a href="/profile" class="back-link btn-back-smart">👤 В кабинет</a>
-                    </div> 
+                    </div>
                 </div>
                 
                 <script>
@@ -145,16 +146,29 @@ export default (db) => {
 
     // ------------------------------------------
     // 2. ОБНОВЛЕНИЕ ПОДПИСКИ (ФОНОВЫЙ AJAX)
+    // Добавлена обработка телефона
     // ------------------------------------------
     router.post("/update", requireLogin, async (req, res) => {
         try {
-            const { activity, action, limit } = req.body; 
+            const { activity, action, limit, phone } = req.body; 
             const uid = req.session.user._id;
             
+            // Если с публичной страницы пришел телефон, обновляем его в базе
+            if (phone) {
+                await db.collection('users').updateOne(
+                    { _id: ObjectId.createFromHexString(uid) },
+                    { $set: { phone: phone } }
+                );
+                // Обновляем сессию, чтобы телефон сразу подставлялся в формах
+                req.session.user.phone = phone; 
+            }
+
             if(action === "join") await addUserActivity(db, uid, activity, limit);
             else await removeUserActivity(db, uid, activity);
             
-            res.json({ status: 'ok' });  
+            req.session.save(() => {
+                res.json({ status: 'ok' });  
+            });
         } catch (e) {
             console.error(e);
             res.status(500).json({ error: "Ошибка обновления активности" });
@@ -163,6 +177,7 @@ export default (db) => {
 
     // ------------------------------------------
     // 3. ПРОСМОТР КОНКРЕТНОЙ АКТИВНОСТИ (С КНОПКАМИ СВЕРХУ)
+    // Убрали лимит (крутилки), добавили поле для телефона
     // ------------------------------------------
     router.get('/:activityName', requireLogin, async (req, res) => {
         try {
@@ -171,14 +186,12 @@ export default (db) => {
 
             const safeCsrf = res.locals.csrfToken || ''; 
             const uid = req.session.user._id;
-            
-            // Проверяем, записан ли текущий пользователь
+             
             const currentUser = await db.collection("users").findOne({ _id: ObjectId.createFromHexString(uid) });
             const userActivities = currentUser ? (currentUser.activities || []) : [];
             const isJoined = userActivities.some(a => a === activityName || (a && a.name === activityName));
 
-            // Ищем всех участников
-            const participants = await db.collection('users').find({ 
+             const participants = await db.collection('users').find({ 
                 $or: [
                     { activities: activityName },
                     { "activities.name": activityName }
@@ -204,7 +217,7 @@ export default (db) => {
                     <div class="card-info" style="margin-bottom:15px;">📅 ${(p.availability?.days||[]).join(', ')} | ⏰ ${p.availability?.time || ''}</div>
                     
                     <form onsubmit="sendActivityMessage(event, '${p._id}')" class="msg-form">
-                        <input type="text" name="contact" placeholder="Ваш контакт" required>
+                        <input type="text" name="contact" placeholder="Ваш контакт" required value="${currentUser && currentUser.phone ? currentUser.phone : ''}">
                         <textarea name="text" placeholder="Сообщение..." required></textarea>
                         <button type="submit">Написать ${p.name || ''}</button>
                     </form>
@@ -219,10 +232,12 @@ export default (db) => {
                     h1{text-align:center; color:#333; margin-bottom:20px;}
                     
                     .my-panel { background: white; padding: 20px; border-radius: 10px; margin-bottom: 30px; border: 2px solid #007BFF; box-shadow: 0 4px 15px rgba(0,123,255,0.2); text-align: center; }
-                    .limit-box { margin-bottom: 15px; font-size: 16px; color: #555; }
-                    .limit-box input { width: 70px; padding: 10px; border: 1px solid #ccc; border-radius: 5px; font-size: 16px; margin-left: 5px; text-align: center; }
-                    .btn-join { background-color: #28a745; color: white; padding: 15px; width: 100%; border: none; border-radius: 8px; font-size: 18px; font-weight: bold; cursor: pointer; }
+                     .btn-join { background-color: #28a745; color: white; padding: 15px; width: 100%; border: none; border-radius: 8px; font-size: 18px; font-weight: bold; cursor: pointer; }
                     .btn-leave { background-color: #dc3545; color: white; padding: 15px; width: 100%; border: none; border-radius: 8px; font-size: 18px; font-weight: bold; cursor: pointer; }
+                    
+                    /* Поле для ввода телефона */
+                    .phone-box { margin-bottom: 15px; }
+                    .phone-box input { width: 100%; padding: 12px; border: 1px solid #ccc; border-radius: 5px; font-size: 16px; box-sizing: border-box; text-align: center; }
                     
                     .card{background:white;padding:20px;margin-bottom:20px;border-radius:10px;box-shadow:0 3px 10px rgba(0,0,0,0.1)}
                     .card-title{font-weight:bold; font-size:1.3em; margin-bottom:10px; display:flex; flex-wrap:wrap; gap:10px; align-items:center;}
@@ -236,7 +251,7 @@ export default (db) => {
                     .nav-buttons { display: flex; gap: 10px; margin-top: 30px; }
                     a.back-btn{ flex: 1; display:block;text-align:center;padding:15px;color:white;text-decoration:none;border-radius:8px; font-weight:bold; font-size:16px; box-sizing: border-box;}
                     .btn-smart { background: #6c757d; }
-                     
+                    
                     @media (max-width: 600px) {
                         body { padding: 10px; }
                         .card { padding: 15px; }
@@ -256,8 +271,8 @@ export default (db) => {
                              <button type="submit" class="btn-leave">Отписаться</button>`
                             :
                             `<input type="hidden" name="action" value="join">
-                             <div class="limit-box">
-                                 <label>Хочу найти до: <input type="number" name="limit" placeholder="∞"></label> чел.
+                             <div class="phone-box">
+                                 <input type="text" name="phone" placeholder="Ваш WhatsApp / Телефон" required value="${currentUser && currentUser.phone ? currentUser.phone : ''}">
                              </div>
                              <button type="submit" class="btn-join">Записаться</button>`
                         }
@@ -271,14 +286,14 @@ export default (db) => {
                 
                 <div class="nav-buttons">
                     <a href="javascript:history.back()" class="back-btn btn-smart">⬅ Назад</a>
-                </div> 
+                </div>
                 
                 <script>
                     async function updateMyStatus(e, name) {
                         e.preventDefault();
                         const form = e.target;
                         const action = form.action.value;
-                        const limit = form.limit ? form.limit.value : '';
+                        const phone = form.phone ? form.phone.value : ''; // Забираем телефон вместо лимита
                         
                         const btn = form.querySelector('button');
                         btn.disabled = true;
@@ -287,7 +302,7 @@ export default (db) => {
                         const res = await fetch('/activities/update', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json', 'x-csrf-token': '${safeCsrf}' },
-                            body: JSON.stringify({ activity: name, action: action, limit: limit })
+                            body: JSON.stringify({ activity: name, action: action, phone: phone })
                         });
 
                         if(res.ok) window.location.reload();
