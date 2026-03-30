@@ -9,7 +9,7 @@ export default (db) => {
     const router = express.Router();
 
     // 👇 ВПИШИ СЮДА СВОЙ EMAIL (АДМИН)
-    const ADMIN_EMAIL = 'tin@mail.ru'; // <--- ИЗМЕНИ НА СВОЮ ПОЧТУ
+    const ADMIN_EMAIL = 'твой@email.com'; // <--- ИЗМЕНИ НА СВОЮ ПОЧТУ
 
     router.get('/clear-cache-now', async (req, res) => {
         try {
@@ -18,8 +18,7 @@ export default (db) => {
         } catch (error) { res.send('Ошибка: ' + error.message); }
     });
 
-    // 👇 ТЕПЕРЬ УДАЛЕНИЕ РАБОТАЕТ В ФОНЕ (AJAX) БЕЗ ПЕРЕЗАГРУЗКИ СТРАНИЦЫ
-    router.post('/admin-delete', async (req, res) => {
+    router.post('/admin-delete', async (req, res) => { 
         if (!req.session || !req.session.user || req.session.user.email !== ADMIN_EMAIL) {
             return res.status(403).json({ error: 'У вас нет прав для удаления' });
         }
@@ -30,7 +29,7 @@ export default (db) => {
             else if (type === 'restaurant') await db.collection('restaurants').deleteOne({ _id: new ObjectId(id) });
 
             await clearCache(LOGIN_PAGE_CACHE_KEY);
-            res.json({ status: 'ok' }); // Возвращаем OK вместо перезагрузки страницы
+            res.json({ status: 'ok' }); 
         } catch (err) { console.error(err); res.status(500).json({ error: 'Ошибка при удалении' }); }
     });
 
@@ -111,7 +110,8 @@ export default (db) => {
     // 2. ГЛАВНАЯ СТРАНИЦА
     router.get(["/", "/login"], async (req, res) => { 
         try {
-            res.set('Cache-Control', 'public, max-age=0, must-revalidate'); 
+            // 👇 Запрет кэширования старых страниц
+            res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private'); 
             
             const currentUser = req.session && req.session.user ? req.session.user : null;
             const isAdmin = currentUser && currentUser.email === ADMIN_EMAIL;
@@ -138,20 +138,19 @@ export default (db) => {
             pageData.hikingCount = activityCounts["Походы"] || 0;
             pageData.travelCount = activityCounts["Путешествие"] || 0;
  
-            // Изменили кнопку удаления на вызов JS функции
+            // 👇 МАЛЕНЬКИЙ КРЕСТИК УДАЛЕНИЯ
             const getDeleteBtn = (type, id) => {
                 if (!isAdmin) return '';
-                return `
-                <button onclick="adminDelete('${type}', '${id}', this)" style="position: absolute; right: 5px; top: 5px; z-index: 10; background: red; color: white; border: none; padding: 2px 6px; font-size: 12px; border-radius: 3px; cursor: pointer;" title="Удалить">❌</button>`;
+                return `<span onclick="adminDelete('${type}', '${id}', this)" style="background: red; color: white; padding: 2px 5px; font-size: 10px; border-radius: 3px; cursor: pointer; margin-left: 8px; user-select: none; position: relative; top: -1px;" title="Удалить">❌</span>`;
             };
 
+            // Комментарии
             let commentsHtml = pageData.comments.map(c => {
                 const likesCount = c.likes ? c.likes.length : 0;
                 const dislikesCount = c.dislikes ? c.dislikes.length : 0;
                 return `
-                <div class="comment" style="background: rgba(255,255,255,0.1); padding: 10px; margin-bottom: 10px; border-radius: 5px; position: relative;">
-                    ${getDeleteBtn('comment', c._id)}
-                    <div style="font-size: 14px; margin-bottom: 8px;"><b>${c.authorName}:</b> ${c.text}</div>
+                <div class="comment" style="background: rgba(255,255,255,0.1); padding: 10px; margin-bottom: 10px; border-radius: 5px;">
+                    <div style="font-size: 14px; margin-bottom: 8px;"><b>${c.authorName}</b>${getDeleteBtn('comment', c._id)}: ${c.text}</div>
                     <div style="display: flex; gap: 15px; font-size: 13px;">
                         <span onclick="voteComment('${c._id}', 'like')" style="cursor: pointer; color: #28a745; user-select: none; padding: 2px 5px; border-radius: 3px; background: rgba(40,167,69,0.1);">👍 <span id="likes-${c._id}"><b>${likesCount}</b></span></span>
                         <span onclick="voteComment('${c._id}', 'dislike')" style="cursor: pointer; color: #dc3545; user-select: none; padding: 2px 5px; border-radius: 3px; background: rgba(220,53,69,0.1);">👎 <span id="dislikes-${c._id}"><b>${dislikesCount}</b></span></span>
@@ -159,6 +158,7 @@ export default (db) => {
                 </div>`;
             }).join('');
 
+            // История оценок
             let historyItems = [];
             pageData.comments.forEach(c => {
                 const shortText = c.text.length > 25 ? c.text.substring(0, 25) + '...' : c.text;
@@ -183,11 +183,12 @@ export default (db) => {
 
             const historyContainer = `<div style="max-height: 250px; overflow-y: auto; padding-right: 5px;" class="custom-scrollbar">${historyHtml}</div>`;
 
+            // Рестораны
             let restaurantsHtml = (pageData.restaurants || []).map(r => `
-                <div style="background: rgba(255,152,0,0.1); padding: 12px; margin-bottom: 10px; border-radius: 5px; border-left: 4px solid #ff9800; position: relative;">
-                    ${getDeleteBtn('restaurant', r._id)}
-                    <div style="font-size: 15px; margin-bottom: 5px; display: flex; justify-content: space-between; padding-right: 20px;">
-                        <b>${r.name}</b> <span style="color:#ff9800; font-weight:bold; background:rgba(255,152,0,0.2); padding:2px 6px; border-radius:4px; font-size:12px;">${r.discount}</span>
+                <div style="background: rgba(255,152,0,0.1); padding: 12px; margin-bottom: 10px; border-radius: 5px; border-left: 4px solid #ff9800;">
+                    <div style="font-size: 15px; margin-bottom: 5px; display: flex; justify-content: space-between; align-items: center;">
+                        <div><b>${r.name}</b>${getDeleteBtn('restaurant', r._id)}</div> 
+                        <span style="color:#ff9800; font-weight:bold; background:rgba(255,152,0,0.2); padding:2px 6px; border-radius:4px; font-size:12px;">${r.discount}</span>
                     </div>
                     <div style="font-size: 13px; color: #ccc; margin-bottom: 8px;">${r.description}</div>
                     <div style="font-size: 12px; color: #aaa;">📞 Бронь: <span style="color:white;">${r.contact}</span></div>
@@ -196,16 +197,16 @@ export default (db) => {
 
             const restaurantsContainer = `<div style="max-height: 250px; overflow-y: auto; padding-right: 5px;" class="custom-scrollbar">${restaurantsHtml}</div>`;
 
+            // Идеи
             let feedbacksHtml = (pageData.feedbacks || []).map(f => `
-                <div style="background: rgba(255,255,255,0.1); padding: 10px; margin-bottom: 5px; border-radius: 5px; font-size: 13px; border-left: 3px solid #6cafff; position: relative;">
-                    ${getDeleteBtn('feedback', f._id)}
-                    <b style="color: #6cafff;">${f.contact}:</b> <span style="color:#eee; display: inline-block; padding-right: 20px;">${f.text}</span>
+                <div style="background: rgba(255,255,255,0.1); padding: 10px; margin-bottom: 5px; border-radius: 5px; font-size: 13px; border-left: 3px solid #6cafff;">
+                    <b style="color: #6cafff;">${f.contact}</b>${getDeleteBtn('feedback', f._id)}: <span style="color:#eee;">${f.text}</span>
                 </div>
             `).join('') || '<p style="text-align:center; color:#777; font-size: 13px;">Будьте первыми!</p>';
 
             const feedbackContainer = `<div style="max-height: 150px; overflow-y: auto; padding-right: 5px; margin-bottom: 15px;" class="custom-scrollbar">${feedbacksHtml}</div>`;
 
-            const renderGalleryItem = (t) => {  
+            const renderGalleryItem = (t) => { 
                 let src = t.imageBase64 ? `data:${t.mimetype || 'image/jpeg'};base64,${t.imageBase64}` : `/uploads/${t.fileName}`;
                 const content = `<img src="${src}" alt="${t.originalName}" loading="lazy">`;
                 
@@ -279,7 +280,7 @@ export default (db) => {
                       .work-border { border: 2px solid orange; }
                       .status-label { font-size: 10px; text-align: center; margin-top: 4px; font-weight: bold; width: 100%; word-break: break-word; line-height: 1.2;}
                         
-                        .status-free { color: #28a745; }  
+                        .status-free { color: #28a745; } 
                         .status-company { color: #ffc107; } 
                         .status-alone { color: #e056fd; } 
                         .status-cocktail { color: #00bcd4; } 
@@ -429,8 +430,7 @@ export default (db) => {
                     <script>
                         let currentToUserId = ''; let currentImageId = '';
 
-                        // 👇 СКРИПТ АДМИНСКОГО УДАЛЕНИЯ (БЕЗ ПЕРЕЗАГРУЗКИ)
-                        async function adminDelete(type, id, btn) {
+                        async function adminDelete(type, id, btn) { 
                             if (!confirm('Точно удалить этот контент?')) return;
                             const res = await fetch('/admin-delete', {
                                 method: 'POST',
@@ -438,8 +438,7 @@ export default (db) => {
                                 body: JSON.stringify({ type, id })
                             });
                             if (res.ok) {
-                                // Просто стираем блок с экрана
-                                const element = btn.closest('.comment') || btn.closest('div[style*="position: relative"]');
+                                const element = btn.closest('.comment') || btn.closest('div[style*="rgba(255,152,0,0.1)"]') || btn.closest('div[style*="rgba(255,255,255,0.1)"]');
                                 if (element) element.remove();
                             } else {
                                 alert('Произошла ошибка при удалении.');
