@@ -12,7 +12,7 @@ export default (db) => {
 
     router.get("/", requireLogin, async (req, res) => { 
         try { 
-            // 👇 ТЕПЕРЬ БРАУЗЕР НЕ БУДЕТ ЗАПОМИНАТЬ СТАРЫЕ СТРАНИЦЫ
+            // Отключаем кэш браузера, чтобы всегда была свежая версия
             res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');  
             
             const user = await db.collection('users').findOne({ _id: ObjectId.createFromHexString(req.session.user._id) });
@@ -48,7 +48,7 @@ export default (db) => {
                     <style>
                         body{font-family:Arial;padding:20px;background:url('/images/background.jpg') center/cover fixed;color:white; margin:0;}
                         .content{background:rgba(0,0,0,0.9);padding:30px;border-radius:10px;max-width:700px;margin:auto;box-shadow:0 0 20px rgba(0,0,0,0.7);}
-                         
+                        
                         .nav-buttons { display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin-bottom:20px; }
                         .nav-btn { text-decoration:none; padding:12px 20px; border-radius:30px; font-weight:bold; color:white; transition:0.3s; text-align:center; cursor: pointer; }
                         .nav-btn:hover { transform:scale(1.05); }

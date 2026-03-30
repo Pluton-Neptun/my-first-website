@@ -84,8 +84,7 @@ export default (db) => {
                     
                     .nav-buttons { display: flex; gap: 10px; margin-top: 30px; }
                     a.back-link { flex: 1; display: block; color: white; text-align: center; padding: 15px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px; box-sizing: border-box;}
-                    a.btn-back-smart { background: #6c757d; }
-                    a.btn-home { background: #007BFF; }
+                    a.btn-back-smart { background: #6c757d; } 
                     
                     @media (max-width: 600px) { 
                         .activity-card { padding: 15px; }
@@ -114,8 +113,7 @@ export default (db) => {
                     
                     <div class="nav-buttons">
                         <a href="/profile" class="back-link btn-back-smart">👤 В кабинет</a>
-                        <a href="/" class="back-link btn-home">🏠 На главную</a>
-                    </div>
+                    </div> 
                 </div>
                 
                 <script>
@@ -238,8 +236,7 @@ export default (db) => {
                     .nav-buttons { display: flex; gap: 10px; margin-top: 30px; }
                     a.back-btn{ flex: 1; display:block;text-align:center;padding:15px;color:white;text-decoration:none;border-radius:8px; font-weight:bold; font-size:16px; box-sizing: border-box;}
                     .btn-smart { background: #6c757d; }
-                    .btn-home { background: #007BFF; }
-                    
+                     
                     @media (max-width: 600px) {
                         body { padding: 10px; }
                         .card { padding: 15px; }
@@ -274,8 +271,7 @@ export default (db) => {
                 
                 <div class="nav-buttons">
                     <a href="javascript:history.back()" class="back-btn btn-smart">⬅ Назад</a>
-                    <a href="/" class="back-btn btn-home">🏠 На главную</a>
-                </div>
+                </div> 
                 
                 <script>
                     async function updateMyStatus(e, name) {
