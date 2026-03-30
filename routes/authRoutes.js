@@ -20,18 +20,13 @@ export default (db) => {
                 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
                 <style>
                     body{font-family:Arial;background:url('/images/background.jpg') center/cover fixed;height:100vh;display:flex;justify-content:center;align-items:center;margin:0}
-                    /* Сделали форму резиновой для телефонов */
-                    form{background:rgba(0,0,0,0.85);padding:30px;border-radius:10px;color:white;width:90%;max-width:350px;box-sizing:border-box;box-shadow:0 0 15px black}
-                    /* Увеличили padding и font-size для удобства пальцев */
+                     form{background:rgba(0,0,0,0.85);padding:30px;border-radius:10px;color:white;width:90%;max-width:350px;box-sizing:border-box;box-shadow:0 0 15px black}
                     input{width:100%;padding:15px;margin:10px 0;border-radius:5px;border:none;box-sizing:border-box;font-size:16px;}
                     button{width:100%;padding:15px;background:#28a745;color:white;border:none;cursor:pointer;font-size:18px;border-radius:5px;margin-top:10px;font-weight:bold;}
                     button:hover{background:#218838}
                     a{color:#6cafff;text-decoration:none}
                     a:hover{text-decoration:underline}
-                    
-                    @media (max-width: 400px) {
-                        form { padding: 20px; }
-                    }
+                    @media (max-width: 400px) { form { padding: 20px; } }
                 </style>
             </head>
             <body>
@@ -105,10 +100,7 @@ export default (db) => {
                     button{width:100%;padding:15px;background:#007bff;color:white;border:none;cursor:pointer;font-size:18px;border-radius:5px;margin-top:10px;font-weight:bold;}
                     button:hover{background:#0056b3}
                     a{color:#6cafff;text-decoration:none}
-                    
-                    @media (max-width: 400px) {
-                        form { padding: 20px; }
-                    }
+                    @media (max-width: 400px) { form { padding: 20px; } }
                 </style>
             </head>
             <body>
@@ -140,7 +132,11 @@ export default (db) => {
 
             if (user) { 
                 req.session.user = user; 
-                res.redirect("/profile"); 
+                // 👇 ИСПРАВЛЕНИЕ: Ждем сохранения сессии перед редиректом
+                req.session.save((err) => {
+                    if (err) console.error("Ошибка сохранения сессии:", err);
+                    res.redirect("/profile"); 
+                });
             } else { 
                 res.send(`<body style="background:#333;color:white;text-align:center;padding-top:50px;font-family:Arial;font-size:18px;">
                     <h2>Неверный логин или пароль</h2>
@@ -179,4 +175,4 @@ export default (db) => {
     });
 
     return router;
-};
+}; 

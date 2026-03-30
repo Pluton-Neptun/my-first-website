@@ -108,9 +108,9 @@ export default (db) => {
     });
 
     // 2. ГЛАВНАЯ СТРАНИЦА
-    router.get(["/", "/login"], async (req, res) => { 
-        try {
-            // 👇 Запрет кэширования старых страниц
+    // 👇 ИСПРАВЛЕНИЕ: Убрал "/login" отсюда, теперь здесь только "/"
+    router.get("/", async (req, res) => { 
+        try { 
             res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private'); 
             
             const currentUser = req.session && req.session.user ? req.session.user : null;
@@ -138,14 +138,12 @@ export default (db) => {
             pageData.hikingCount = activityCounts["Походы"] || 0;
             pageData.travelCount = activityCounts["Путешествие"] || 0;
  
-            // 👇 МАЛЕНЬКИЙ КРЕСТИК УДАЛЕНИЯ
-            const getDeleteBtn = (type, id) => {
+            const getDeleteBtn = (type, id) => { 
                 if (!isAdmin) return '';
                 return `<span onclick="adminDelete('${type}', '${id}', this)" style="background: red; color: white; padding: 2px 5px; font-size: 10px; border-radius: 3px; cursor: pointer; margin-left: 8px; user-select: none; position: relative; top: -1px;" title="Удалить">❌</span>`;
             };
 
-            // Комментарии
-            let commentsHtml = pageData.comments.map(c => {
+            let commentsHtml = pageData.comments.map(c => { 
                 const likesCount = c.likes ? c.likes.length : 0;
                 const dislikesCount = c.dislikes ? c.dislikes.length : 0;
                 return `
@@ -158,8 +156,7 @@ export default (db) => {
                 </div>`;
             }).join('');
 
-            // История оценок
-            let historyItems = [];
+            let historyItems = []; 
             pageData.comments.forEach(c => {
                 const shortText = c.text.length > 25 ? c.text.substring(0, 25) + '...' : c.text;
                 if (c.likes) c.likes.forEach(email => historyItems.push({ type: 'like', email, text: shortText, date: c.createdAt }));
@@ -183,8 +180,7 @@ export default (db) => {
 
             const historyContainer = `<div style="max-height: 250px; overflow-y: auto; padding-right: 5px;" class="custom-scrollbar">${historyHtml}</div>`;
 
-            // Рестораны
-            let restaurantsHtml = (pageData.restaurants || []).map(r => `
+            let restaurantsHtml = (pageData.restaurants || []).map(r => ` 
                 <div style="background: rgba(255,152,0,0.1); padding: 12px; margin-bottom: 10px; border-radius: 5px; border-left: 4px solid #ff9800;">
                     <div style="font-size: 15px; margin-bottom: 5px; display: flex; justify-content: space-between; align-items: center;">
                         <div><b>${r.name}</b>${getDeleteBtn('restaurant', r._id)}</div> 
@@ -197,8 +193,7 @@ export default (db) => {
 
             const restaurantsContainer = `<div style="max-height: 250px; overflow-y: auto; padding-right: 5px;" class="custom-scrollbar">${restaurantsHtml}</div>`;
 
-            // Идеи
-            let feedbacksHtml = (pageData.feedbacks || []).map(f => `
+            let feedbacksHtml = (pageData.feedbacks || []).map(f => ` 
                 <div style="background: rgba(255,255,255,0.1); padding: 10px; margin-bottom: 5px; border-radius: 5px; font-size: 13px; border-left: 3px solid #6cafff;">
                     <b style="color: #6cafff;">${f.contact}</b>${getDeleteBtn('feedback', f._id)}: <span style="color:#eee;">${f.text}</span>
                 </div>
