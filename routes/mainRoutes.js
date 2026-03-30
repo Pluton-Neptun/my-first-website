@@ -8,8 +8,7 @@ function isImage(filename) { return filename && filename.match(/\.(jpg|jpeg|png|
 export default (db) => {
     const router = express.Router();
 
-    // 👇 ВПИШИ СЮДА СВОЙ EMAIL (АДМИН)
-    const ADMIN_EMAIL = 'tin@mail.ru'; // <--- ИЗМЕНИ НА СВОЮ ПОЧТУ
+    const ADMIN_EMAIL = 'tin@mail.ru'; 
 
     router.get('/clear-cache-now', async (req, res) => {
         try {
@@ -37,8 +36,7 @@ export default (db) => {
         if (!req.session || !req.session.user) {
             return res.status(401).json({ error: 'Нужна авторизация' });
         }
-
-        try {
+        try { 
             const { toUserId, imageId, messageText, contactInfo, source } = req.body;
             let receiverId; 
             try { receiverId = new ObjectId(toUserId); } 
@@ -107,6 +105,7 @@ export default (db) => {
         } catch (e) { console.error(e); res.status(500).send("Ошибка при добавлении ресторана"); }
     });
 
+    // 👇 ИСПРАВЛЕНИЕ: Бэкенд теперь отвечает JSON-ом, а не перезагружает страницу
     router.post('/submit-feedback', async (req, res) => {
         try {
             const { feedbackText, contactInfo } = req.body;
@@ -114,8 +113,11 @@ export default (db) => {
                 await db.collection('feedback').insertOne({ text: feedbackText, contact: contactInfo || 'Гость', createdAt: new Date() });
                 await clearCache(LOGIN_PAGE_CACHE_KEY);
             }
-            res.redirect('/');
-        } catch (err) { console.error(err); res.status(500).send('Ошибка при отправке пожелания'); }
+            res.json({ status: 'ok' });
+        } catch (err) { 
+            console.error(err); 
+            res.status(500).json({ error: 'Ошибка при отправке пожелания' }); 
+        }
     });
 
     // 2. ГЛАВНАЯ СТРАНИЦА
@@ -246,8 +248,7 @@ export default (db) => {
                 `;
             }
 
-            // 👇 Создаем HTML для смайликов ТОЛЬКО если пользователь авторизован
-            const emojiPickerHtml = currentUser ? `
+            const emojiPickerHtml = currentUser ? ` 
                 <div id="emojiPickerBar" class="emoji-picker" style="display: none; margin: 5px 0; font-size: 22px; text-align: center; user-select: none; transition: 0.3s;">
                     <span onclick="addEmoji('👍')" style="cursor:pointer; margin: 0 4px;">👍</span>
                     <span onclick="addEmoji('🔥')" style="cursor:pointer; margin: 0 4px;">🔥</span>
@@ -318,8 +319,7 @@ export default (db) => {
                         .custom-scrollbar::-webkit-scrollbar-track { background: rgba(255,255,255,0.1); border-radius: 5px; }
                         .custom-scrollbar::-webkit-scrollbar-thumb { background: #888; border-radius: 5px; }
                         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #555; }
-
-                        /* Стили для смайлов */
+ 
                         .emoji-picker span { transition: transform 0.2s; display: inline-block; }
                         .emoji-picker span:hover { transform: scale(1.3); }
 
@@ -386,7 +386,8 @@ export default (db) => {
                                 <h3 style="color: #6cafff; margin-top:0;">💡 Идеи и пожелания</h3>
                                 <p style="font-size: 12px; color: #ccc; margin-top: -10px;">Как нам улучшить сайт?</p>
                                 ${feedbackContainer}
-                                <form action="/submit-feedback" method="POST" style="margin:0;">
+                                
+                                <form onsubmit="submitFeedback(event)" style="margin:0;">
                                     <input type="hidden" name="_csrf" value="${res.locals.csrfToken}">
                                     <input type="text" name="contactInfo" placeholder="Ваше имя/контакт" value="${currentUser ? (currentUser.name || currentUser.email) : ''}" required style="padding: 8px; font-size: 14px;">
                                     
@@ -450,8 +451,7 @@ export default (db) => {
 
                     <script>
                         let currentToUserId = ''; let currentImageId = '';
-
-                        // Показываем смайлики только при клике на поле (если они вообще есть)
+ 
                         function showEmojiPicker() {
                             const picker = document.getElementById('emojiPickerBar');
                             if (picker) {
@@ -459,12 +459,46 @@ export default (db) => {
                             }
                         }
 
-                        // Функция для вставки смайлов в текст
-                        function addEmoji(emoji) {
+                        function addEmoji(emoji) { 
                             const input = document.getElementById('feedbackInput');
                             if (input) {
                                 input.value += emoji;
                                 input.focus();
+                            }
+                        }
+
+                        // 👇 ИСПРАВЛЕНИЕ: Функция для отправки пожелания без перезагрузки
+                        async function submitFeedback(e) {
+                            e.preventDefault(); // Останавливаем стандартную отправку
+                            const form = e.target;
+                            const btn = form.querySelector('button');
+                            const contactInfo = form.contactInfo.value;
+                            const feedbackText = form.feedbackText.value;
+                            const csrf = form._csrf.value;
+
+                            btn.disabled = true;
+                            btn.innerText = 'Отправка...';
+
+                            const res = await fetch('/submit-feedback', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrf },
+                                body: JSON.stringify({ contactInfo, feedbackText })
+                            });
+
+                            if (res.ok) {
+                                form.feedbackText.value = ''; // Очищаем поле
+                                btn.innerText = 'Отправлено! ✔️';
+                                btn.style.background = '#28a745'; // Делаем кнопку зеленой на секунду
+                                
+                                setTimeout(() => {
+                                    btn.disabled = false;
+                                    btn.innerText = 'Отправить идею';
+                                    btn.style.background = '#007BFF'; // Возвращаем синий цвет
+                                }, 2500);
+                            } else {
+                                alert('Ошибка отправки.');
+                                btn.disabled = false;
+                                btn.innerText = 'Отправить идею';
                             }
                         }
 
