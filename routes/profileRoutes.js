@@ -12,7 +12,9 @@ export default (db) => {
 
     router.get("/", requireLogin, async (req, res) => { 
         try { 
-            res.set('Cache-Control', 'public, max-age=0, must-revalidate');  
+            // 👇 ТЕПЕРЬ БРАУЗЕР НЕ БУДЕТ ЗАПОМИНАТЬ СТАРЫЕ СТРАНИЦЫ
+            res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');  
+            
             const user = await db.collection('users').findOne({ _id: ObjectId.createFromHexString(req.session.user._id) });
             const availability = user.availability || { days: [], time: "" };
 
@@ -61,7 +63,7 @@ export default (db) => {
                         button{background:#28a745;color:white;border:none;cursor:pointer}
                         .msg-card { background:rgba(255,255,255,0.1); padding:10px; margin-bottom:10px; border-radius:5px; border-left:4px solid #00c3ff; }
                         .msg-source { font-size:0.8em; color:#d4af37; margin-bottom:5px; font-weight:bold; }
-                        hr { border:0; border-top:1px solid #555; margin:20px 0; }
+                        <hr> { border:0; border-top:1px solid #555; margin:20px 0; }
                        
                         .tabs { display:flex; justify-content:center; gap:20px; margin-bottom:15px; border-bottom:1px solid #555; padding-bottom:10px; flex-wrap:wrap;}
                         .tab-link { color:#aaa; cursor:pointer; font-size:1.1em; padding: 5px 10px; border-radius: 5px; transition: 0.3s;}
@@ -239,4 +241,4 @@ export default (db) => {
     }); 
 
     return router;
-}; 
+};
