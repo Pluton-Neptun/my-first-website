@@ -89,7 +89,7 @@ export default (db) => {
                         <h2>Кабинет: ${user.name}</h2>
                         
                         <div class="nav-buttons">
-                            <a href="/" class="nav-btn btn-home">🏠 Главная (Стена)</a>
+                            <a href="/login" class="nav-btn btn-home">🏠 Главная (Стена)</a>
                             <a href="/work" class="nav-btn btn-cocktail">🍹 Коктейль</a>
                             <a href="/activities" class="nav-btn btn-activities">⚽ Активности</a>
                             <a href="/profile/create-evening" class="nav-btn btn-publish">🌙 После 19:00</a>
