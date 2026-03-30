@@ -1,6 +1,6 @@
 import express from 'express';
 import { ObjectId } from "mongodb"; 
- 
+
 const requireLogin = (req, res, next) => {
     if (req.session.user) next();
     else return res.redirect("/login"); 
@@ -17,8 +17,7 @@ export default (db) => {
             res.set('Cache-Control', 'public, max-age=0, must-revalidate');  
             const uid = ObjectId.createFromHexString(req.session.user._id);
             
-            // Ищем активные публикации пользователя (срок еще не вышел)
-            const myRequests = await db.collection('activity_requests').find({ 
+             const myRequests = await db.collection('activity_requests').find({ 
                 userId: uid, 
                 expiresAt: { $gt: new Date() } 
             }).toArray();
@@ -26,8 +25,7 @@ export default (db) => {
             const renderCard = (name, icon) => {
                 const activeReq = myRequests.find(r => r.activity === name);
                 
-                // ЕСЛИ УЖЕ ОПУБЛИКОВАНО:
-                if (activeReq) {
+                 if (activeReq) {
                     const spotsLeft = activeReq.limit - (activeReq.participants ? activeReq.participants.length : 0);
                     return `
                     <div class="activity-card" style="border-left: 5px solid #28a745; background: #f8fff9;">
@@ -46,9 +44,7 @@ export default (db) => {
                             <button type="submit" class="btn btn-leave" style="padding:10px;">Отменить сбор</button>
                         </form>
                     </div>`;
-                } 
-                // ЕСЛИ ЕЩЕ НЕ ОПУБЛИКОВАНО:
-                else {
+                } else {
                     return `
                     <div class="activity-card">
                         <div class="activity-header">
@@ -75,13 +71,13 @@ export default (db) => {
                     body { font-family: Arial, sans-serif; padding: 10px; background-color: #f4f6f9; margin: 0; color: #333; }
                     .tab-container { width: 100%; max-width: 600px; margin: 0 auto; padding-bottom: 30px; box-sizing: border-box; }
                     h2 { text-align: center; margin-top: 10px; color: #333; }
-                     h3 { margin-top: 25px; border-bottom: 2px solid #ddd; padding-bottom: 8px; color: #555; }
+                    h3 { margin-top: 25px; border-bottom: 2px solid #ddd; padding-bottom: 8px; color: #555; }
                     .activity-card { padding: 20px; background-color: white; border: 1px solid #e1e4e8; margin-bottom: 15px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
                     .activity-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
                     .activity-title { color:#007BFF; text-decoration:none; font-size: 1.3em; font-weight: bold; }
-                     .btn { padding: 12px 20px; border: none; border-radius: 8px; color: white; cursor: pointer; font-size: 16px; font-weight: bold; width: 100%; box-sizing: border-box; transition: 0.2s;}
+                    .btn { padding: 12px 20px; border: none; border-radius: 8px; color: white; cursor: pointer; font-size: 16px; font-weight: bold; width: 100%; box-sizing: border-box; transition: 0.2s;}
                     .btn-publish:hover { opacity:0.9; }
-                     .btn-leave { background-color: #dc3545; } .btn-leave:hover { background-color: #c82333; }
+                    .btn-leave { background-color: #dc3545; } .btn-leave:hover { background-color: #c82333; }
                     .nav-buttons { display: flex; gap: 10px; margin-top: 30px; }
                     a.back-link { flex: 1; display: block; color: white; text-align: center; padding: 15px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px; box-sizing: border-box; background: #6c757d;}
                 </style></head><body>
@@ -106,30 +102,29 @@ export default (db) => {
                         <a href="/profile" class="back-link">👤 В кабинет</a>
                     </div>
                 </div>
-                </body></html> 
-            `); 
+                </body></html>
+            `);
         } catch(error) { console.error(error); res.status(500).send("Ошибка."); }
     });
 
     // ------------------------------------------
-    // 2. ОБРАБОТЧИК ПУБЛИКАЦИИ СБОРА (На 10 часов)
+    // 2. ОБРАБОТЧИК ПУБЛИКАЦИИ СБОРА
     // ------------------------------------------
     router.post("/publish", requireLogin, async (req, res) => {
         try {
             const { activity, limit } = req.body;
             const user = await db.collection("users").findOne({ _id: ObjectId.createFromHexString(req.session.user._id) });
             
-            // Удаляем старые сборы этого юзера на эту же активность, чтобы не дублировать
-            await db.collection('activity_requests').deleteMany({ userId: user._id, activity: activity });
+             await db.collection('activity_requests').deleteMany({ userId: user._id, activity: activity });
 
             await db.collection('activity_requests').insertOne({
                 userId: user._id,
                 userName: user.name,
                 activity: activity,
                 limit: parseInt(limit) || 10,
-                participants: [], // Здесь будут те, кто запишется
+                participants: [], 
                 createdAt: new Date(),
-                expiresAt: new Date(Date.now() + 10 * 60 * 60 * 1000) // Срок жизни 10 часов
+                expiresAt: new Date(Date.now() + 10 * 60 * 60 * 1000) 
             });
 
             res.redirect('/activities');
@@ -151,7 +146,7 @@ export default (db) => {
     });
 
     // ------------------------------------------
-    // 4. ПУБЛИЧНАЯ СТРАНИЦА АКТИВНОСТИ (Просмотр сборов)
+    // 4. ПУБЛИЧНАЯ СТРАНИЦА АКТИВНОСТИ (С формой сообщения)
     // ------------------------------------------
     router.get('/:activityName', requireLogin, async (req, res) => {
         try {
@@ -161,17 +156,15 @@ export default (db) => {
             const currentUserIdStr = req.session.user._id;
             const currentUser = await db.collection("users").findOne({ _id: ObjectId.createFromHexString(currentUserIdStr) });
 
-            // ДОСТАЕМ ВСЕ АКТИВНЫЕ СБОРЫ (Время которых еще не вышло)
-            let activeRequests = await db.collection('activity_requests').find({ 
-                activity: activityName,
+             let activeRequests = await db.collection('activity_requests').find({ 
+                activity: activityName, 
                 expiresAt: { $gt: new Date() }
             }).sort({ createdAt: -1 }).toArray();
 
-            // ФИЛЬТРУЕМ: Оставляем только те, где ЕСТЬ МЕСТА (или это сбор самого юзера)
-            activeRequests = activeRequests.filter(r => {
+            activeRequests = activeRequests.filter(r => { 
                 const isAuthor = r.userId.toString() === currentUserIdStr;
                 const hasSpace = r.participants.length < r.limit;
-                return isAuthor || hasSpace; // Скрываем чужие забитые сборы
+                return isAuthor || hasSpace; 
             });
             
             let html = activeRequests.map(reqData => { 
@@ -182,8 +175,9 @@ export default (db) => {
                 // Если смотрит АВТОР сбора:
                 if (isAuthor) {
                     let partsHtml = reqData.participants.map(p => 
-                        `<div style="background:#eee; padding:8px; border-radius:5px; margin-bottom:5px; font-size:14px;">
-                            👤 <b>${p.userName}</b><br>📞 <a href="tel:${p.phone}" style="color:#007BFF;">${p.phone}</a>
+                        `<div style="background:#eee; padding:10px; border-radius:5px; margin-bottom:8px; font-size:14px; border-left:3px solid #007BFF;">
+                            👤 <b>${p.userName}</b><br>📞 <a href="tel:${p.phone}" style="color:#007BFF; font-weight:bold;">${p.phone}</a>
+                            ${p.message ? `<div style="margin-top:6px; padding-top:6px; border-top:1px solid #ddd; color:#444;">💬 <i>"${p.message}"</i></div>` : ''}
                         </div>`
                     ).join('') || `<p style="color:#777; font-size:13px;">Пока никто не записался.</p>`;
 
@@ -220,8 +214,13 @@ export default (db) => {
                     <form action="/activities/join-request" method="POST" class="msg-form" style="margin:0;">
                         <input type="hidden" name="_csrf" value="${res.locals.csrfToken}">
                         <input type="hidden" name="requestId" value="${reqData._id}">
-                        <label style="font-weight:bold; font-size:14px;">Оставьте номер для связи:</label>
+                        
+                        <label style="font-weight:bold; font-size:14px;">Контакт для связи:</label>
                         <input type="text" name="phone" placeholder="Ваш WhatsApp / Телефон" required value="${currentUser.phone || ''}" style="margin-top:5px;">
+                        
+                        <label style="font-weight:bold; font-size:14px;">Сообщение (необязательно):</label>
+                        <textarea name="message" placeholder="Привет! Я буду вовремя / Возьму мяч..." style="margin-top:5px; margin-bottom:15px;"></textarea>
+                        
                         <button type="submit" style="background:#28a745;">Записаться (${spotsLeft} мест)</button>
                     </form>
                 </div>`;
@@ -232,13 +231,16 @@ export default (db) => {
                 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
                 <style>
                     body{font-family:Arial,sans-serif;padding:15px;background:#eee;max-width:800px;margin:auto;}
-                     h1{text-align:center; color:#333; margin-bottom:20px;}
+                    h1{text-align:center; color:#333; margin-bottom:20px;}
                     .card{background:white;padding:20px;margin-bottom:20px;border-radius:10px;box-shadow:0 3px 10px rgba(0,0,0,0.1)}
                     .card-title{font-weight:bold; font-size:1.3em; margin-bottom:10px; color:#007BFF;}
                     .card-info{color:#555; font-size:1.1em; margin-bottom:5px;}
-                    .msg-form input{width:100%; margin-bottom:10px; padding:12px; box-sizing:border-box; border:1px solid #ccc; border-radius:5px; font-size:16px; text-align:center;}
+                    
+                    .msg-form input, .msg-form textarea {width:100%; padding:12px; box-sizing:border-box; border:1px solid #ccc; border-radius:5px; font-size:15px;}
+                    .msg-form textarea { height: 70px; resize: vertical; }
                     .msg-form button{width:100%; padding:15px; color:white; border:none; cursor:pointer; border-radius:5px; font-size:16px; font-weight:bold;}
                     .msg-form button:hover{opacity:0.9;}
+                    
                     .nav-buttons { display: flex; gap: 10px; margin-top: 30px; }
                     a.back-btn{ flex: 1; display:block;text-align:center;padding:15px;color:white;text-decoration:none;border-radius:8px; font-weight:bold; font-size:16px; box-sizing: border-box; background: #6c757d;}
                 </style></head><body>
@@ -252,41 +254,39 @@ export default (db) => {
                     <a href="javascript:history.back()" class="back-btn">⬅ Назад</a>
                 </div>
                 
-                </body></html> 
+                </body></html>
             `);
         } catch (error) { console.error(error); res.status(500).send('Ошибка.'); }
     });
 
     // ------------------------------------------
-    // 5. ОБРАБОТЧИК ЗАПИСИ НА СБОР
+    // 5. ОБРАБОТЧИК ЗАПИСИ НА СБОР (С сохранением сообщения)
     // ------------------------------------------
     router.post('/join-request', requireLogin, async (req, res) => {
         try {
-            const { requestId, phone } = req.body;
+            const { requestId, phone, message } = req.body;
             const uid = req.session.user._id;
             
-            // 1. Обновляем телефон юзера в его профиле (чтобы не вводить потом)
-            await db.collection('users').updateOne(
+            await db.collection('users').updateOne( 
                 { _id: ObjectId.createFromHexString(uid) },
                 { $set: { phone: phone } }
             );
-            req.session.user.phone = phone; // обновляем в сессии
+            req.session.user.phone = phone; 
             
-            // 2. Добавляем его в список участников сбора
-            await db.collection('activity_requests').updateOne(
+            await db.collection('activity_requests').updateOne( 
                 { _id: new ObjectId(requestId) },
                 { $push: { 
                     participants: { 
                         userId: uid, 
                         userName: req.session.user.name, 
                         phone: phone, 
+                        message: message || '', // Сохраняем сообщение участника
                         joinedAt: new Date() 
                     } 
                 }}
             );
 
-            // Редирект обратно на страницу, с которой он пришел
-            res.redirect(req.get('referer'));
+            res.redirect(req.get('referer')); 
         } catch (error) { console.error(error); res.status(500).send('Ошибка записи.'); }
     });
 
