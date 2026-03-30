@@ -33,7 +33,7 @@ export default (db) => {
         } catch (err) { console.error(err); res.status(500).json({ error: 'Ошибка при удалении' }); }
     });
 
-    router.post('/send-message', async (req, res) => { 
+    router.post('/send-message', async (req, res) => {
         if (!req.session || !req.session.user) {
             return res.status(401).json({ error: 'Нужна авторизация' });
         }
@@ -50,7 +50,7 @@ export default (db) => {
             }
 
             if (!receiverId) return res.status(400).json({ error: 'Не найден получатель' });
- 
+
             const senderContact = contactInfo || req.session.user.phone || req.session.user.name;
 
             await db.collection('messages').insertOne({
@@ -136,7 +136,7 @@ export default (db) => {
                 pageData = { comments, tasks, restaurants, feedbacks }; 
                 await setCache(LOGIN_PAGE_CACHE_KEY, pageData); 
             }
-  
+ 
             const getDeleteBtn = (type, id) => {
                 if (!isAdmin) return '';
                 return `<span onclick="adminDelete('${type}', '${id}', this)" style="background: red; color: white; padding: 2px 5px; font-size: 10px; border-radius: 3px; cursor: pointer; margin-left: 8px; user-select: none; position: relative; top: -1px;" title="Удалить">❌</span>`;
@@ -245,6 +245,19 @@ export default (db) => {
                     </form>
                 `;
             }
+
+            // 👇 Создаем HTML для смайликов ТОЛЬКО если пользователь авторизован
+            const emojiPickerHtml = currentUser ? `
+                <div id="emojiPickerBar" class="emoji-picker" style="display: none; margin: 5px 0; font-size: 22px; text-align: center; user-select: none; transition: 0.3s;">
+                    <span onclick="addEmoji('👍')" style="cursor:pointer; margin: 0 4px;">👍</span>
+                    <span onclick="addEmoji('🔥')" style="cursor:pointer; margin: 0 4px;">🔥</span>
+                    <span onclick="addEmoji('💡')" style="cursor:pointer; margin: 0 4px;">💡</span>
+                    <span onclick="addEmoji('😍')" style="cursor:pointer; margin: 0 4px;">😍</span>
+                    <span onclick="addEmoji('🚀')" style="cursor:pointer; margin: 0 4px;">🚀</span>
+                    <span onclick="addEmoji('😂')" style="cursor:pointer; margin: 0 4px;">😂</span>
+                    <span onclick="addEmoji('🤝')" style="cursor:pointer; margin: 0 4px;">🤝</span>
+                </div>
+            ` : '';
 
             res.send(` 
                 <!DOCTYPE html>
@@ -377,17 +390,9 @@ export default (db) => {
                                     <input type="hidden" name="_csrf" value="${res.locals.csrfToken}">
                                     <input type="text" name="contactInfo" placeholder="Ваше имя/контакт" value="${currentUser ? (currentUser.name || currentUser.email) : ''}" required style="padding: 8px; font-size: 14px;">
                                     
-                                    <div class="emoji-picker" style="margin: 5px 0; font-size: 22px; text-align: center; user-select: none;">
-                                        <span onclick="addEmoji('👍')" style="cursor:pointer; margin: 0 4px;">👍</span>
-                                        <span onclick="addEmoji('🔥')" style="cursor:pointer; margin: 0 4px;">🔥</span>
-                                        <span onclick="addEmoji('💡')" style="cursor:pointer; margin: 0 4px;">💡</span>
-                                        <span onclick="addEmoji('😍')" style="cursor:pointer; margin: 0 4px;">😍</span>
-                                        <span onclick="addEmoji('🚀')" style="cursor:pointer; margin: 0 4px;">🚀</span>
-                                        <span onclick="addEmoji('😂')" style="cursor:pointer; margin: 0 4px;">😂</span>
-                                        <span onclick="addEmoji('🤝')" style="cursor:pointer; margin: 0 4px;">🤝</span>
-                                    </div>
+                                    ${emojiPickerHtml}
                                     
-                                    <textarea id="feedbackInput" name="feedbackText" placeholder="Напишите вашу идею..." required style="width: 100%; height: 50px; margin-bottom: 10px; padding: 8px; box-sizing: border-box; border-radius: 5px; font-size: 14px; resize: none;"></textarea>
+                                    <textarea id="feedbackInput" name="feedbackText" placeholder="Напишите вашу идею..." required style="width: 100%; height: 50px; margin-bottom: 10px; padding: 8px; box-sizing: border-box; border-radius: 5px; font-size: 14px; resize: none;" onclick="showEmojiPicker()"></textarea>
                                     <button type="submit" style="background:#007BFF; padding: 10px; font-size: 14px;">Отправить идею</button>
                                 </form>
                             </div>
@@ -446,7 +451,15 @@ export default (db) => {
                     <script>
                         let currentToUserId = ''; let currentImageId = '';
 
-                        // Функция для вставки смайлов в текст пожеланий
+                        // Показываем смайлики только при клике на поле (если они вообще есть)
+                        function showEmojiPicker() {
+                            const picker = document.getElementById('emojiPickerBar');
+                            if (picker) {
+                                picker.style.display = 'block';
+                            }
+                        }
+
+                        // Функция для вставки смайлов в текст
                         function addEmoji(emoji) {
                             const input = document.getElementById('feedbackInput');
                             if (input) {
@@ -476,7 +489,7 @@ export default (db) => {
                             document.getElementById('modalTitle').innerText = title;
                             document.getElementById('viewLink').href = url;
                             
-                             document.getElementById('actionButtons').style.display = 'flex';
+                            document.getElementById('actionButtons').style.display = 'flex';
                             document.getElementById('msg-form').style.display = 'none';
                             document.getElementById('messageText').value = '';
                             
