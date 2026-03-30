@@ -33,7 +33,12 @@ export default (db) => {
         } catch (err) { console.error(err); res.status(500).json({ error: 'Ошибка при удалении' }); }
     });
 
+    // 👇 ИСПРАВЛЕНИЕ: Бэкенд теперь жестко требует авторизацию для отправки сообщения
     router.post('/send-message', async (req, res) => {
+        if (!req.session || !req.session.user) {
+            return res.status(401).json({ error: 'Нужна авторизация' });
+        }
+
         try {
             const { toUserId, imageId, messageText, contactInfo, source } = req.body;
             let receiverId; 
@@ -47,13 +52,21 @@ export default (db) => {
 
             if (!receiverId) return res.status(400).json({ error: 'Не найден получатель' });
 
+            // Берем контакт из формы, а если его нет - из сессии пользователя
+            const senderContact = contactInfo || req.session.user.phone || req.session.user.name;
+
             await db.collection('messages').insertOne({
-                toUserId: receiverId, fromContact: contactInfo || "Гость",
-                imageId: imageId ? new ObjectId(imageId) : null, source: source || "Галерея",
-                text: messageText, reply: null, createdAt: new Date(), isRead: false
+                toUserId: receiverId, 
+                fromContact: senderContact,
+                imageId: imageId ? new ObjectId(imageId) : null, 
+                source: source || "Галерея",
+                text: messageText, 
+                reply: null, 
+                createdAt: new Date(), 
+                isRead: false
             });
             
-            await db.collection('comments').insertOne({ authorName: contactInfo || "Гость", text: messageText, createdAt: new Date(), likes: [], dislikes: [] });
+            await db.collection('comments').insertOne({ authorName: req.session.user.name, text: messageText, createdAt: new Date(), likes: [], dislikes: [] });
             await clearCache(LOGIN_PAGE_CACHE_KEY); 
             res.json({ status: 'ok' });
         } catch (error) { console.error(error); res.status(500).json({ error: 'Ошибка отправки' }); }
@@ -107,7 +120,7 @@ export default (db) => {
         } catch (err) { console.error(err); res.status(500).send('Ошибка при отправке пожелания'); }
     });
 
-    // 2. ГЛАВНАЯ СТРАНИЦА (ВЕРНУЛ "LOGIN", КАК И БЫЛО ИЗНАЧАЛЬНО)
+    // 2. ГЛАВНАЯ СТРАНИЦА
     router.get(["/", "/login"], async (req, res) => { 
         try {
             res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private'); 
@@ -288,6 +301,7 @@ export default (db) => {
                         .modal-buttons { display: flex; flex-direction: column; gap: 10px; justify-content: center; margin-top: 15px; } 
                       .btn-view { background: #6c757d; color: white; padding: 12px 20px; text-decoration: none; border-radius: 5px; display: block; width: 100%; box-sizing: border-box; }
                         .btn-chat { background: #28a745; color: white; padding: 12px 20px; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; width: 100%; }
+                        .btn-login-prompt { background: #dc3545; color: white; padding: 12px 20px; text-decoration: none; border-radius: 5px; display: block; width: 100%; box-sizing: border-box; font-weight: bold; }
                         .close-modal { position: absolute; top: 10px; right: 15px; font-size: 30px; cursor: pointer; color: #333; font-weight: bold; z-index: 5;}
                         #msg-form { display: none; margin-top: 15px; text-align: left; }
                         #msg-form textarea { width: 100%; height: 80px; margin-bottom: 10px; padding: 8px; box-sizing: border-box; border: 1px solid #ccc; font-size: 16px;}
@@ -322,10 +336,16 @@ export default (db) => {
                             <span class="close-modal" onclick="closeModal('photoModal')">&times;</span>
                             <h3 id="modalTitle" style="margin-top:0; color:black;">Фото</h3>
                             <img id="modalImg" src="">
+                            
                             <div id="actionButtons" class="modal-buttons">
                                 <a id="viewLink" href="#" target="_blank" class="btn-view">👁️ Просто посмотреть</a>
-                                <button onclick="showChatForm()" class="btn-chat">💬 Написать сообщение</button>
+                                ${currentUser ? 
+                                    `<button onclick="showChatForm()" class="btn-chat">💬 Написать сообщение</button>` 
+                                    : 
+                                    `<a href="/login" class="btn-login-prompt">🔒 Войти, чтобы написать</a>`
+                                }
                             </div>
+                            
                             <div id="msg-form">
                                 <label style="color:black; font-weight:bold;">Ваш контакт:</label>
                                 <input type="text" id="contactInfo" placeholder="Email или телефон..." value="${currentUser ? (currentUser.phone || currentUser.email) : ''}">
@@ -444,9 +464,12 @@ export default (db) => {
                             document.getElementById('modalImg').src = url;
                             document.getElementById('modalTitle').innerText = title;
                             document.getElementById('viewLink').href = url;
+                            
+                            // Возвращаем кнопки в исходное состояние при открытии новой фотки
                             document.getElementById('actionButtons').style.display = 'flex';
                             document.getElementById('msg-form').style.display = 'none';
                             document.getElementById('messageText').value = '';
+                            
                             currentToUserId = userId; currentImageId = id;
                         }
 
@@ -455,7 +478,8 @@ export default (db) => {
 
                         async function sendMessage() {
                             const text = document.getElementById('messageText').value;
-                            const contact = document.getElementById('contactInfo').value;
+                            const contact = document.getElementById('contactInfo') ? document.getElementById('contactInfo').value : '';
+                            
                             if(!text) return alert('Напишите сообщение!');
 
                             const res = await fetch('/send-message', {
@@ -464,8 +488,16 @@ export default (db) => {
                                 body: JSON.stringify({ toUserId: currentToUserId, imageId: currentImageId, messageText: text, contactInfo: contact, source: 'Галерея' })
                             });
                             
-                            if(res.ok) { alert('Отправлено!'); closeModal('photoModal'); location.reload(); } 
-                            else { alert('Ошибка отправки.'); }
+                            if(res.ok) { 
+                                alert('Отправлено!'); 
+                                closeModal('photoModal'); 
+                                location.reload(); 
+                            } else if (res.status === 401) {
+                                alert('Для отправки сообщения нужно войти в аккаунт!');
+                                window.location.href = '/login';
+                            } else { 
+                                alert('Ошибка отправки.'); 
+                            }
                         }
 
                         async function voteComment(commentId, type) {
