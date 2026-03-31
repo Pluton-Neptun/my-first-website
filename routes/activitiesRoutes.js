@@ -9,15 +9,12 @@ const requireLogin = (req, res, next) => {
 export default (db) => {
     const router = express.Router();
 
-    // ------------------------------------------
-    // 1. КАБИНЕТ: УПРАВЛЕНИЕ ПУБЛИКАЦИЯМИ СБОРОВ
-    // ------------------------------------------
-    router.get("/", requireLogin, async (req, res) => {
+    router.get("/", requireLogin, async (req, res) => { 
         try {
             res.set('Cache-Control', 'public, max-age=0, must-revalidate');  
             const uid = ObjectId.createFromHexString(req.session.user._id);
             
-             const myRequests = await db.collection('activity_requests').find({ 
+            const myRequests = await db.collection('activity_requests').find({ 
                 userId: uid, 
                 expiresAt: { $gt: new Date() } 
             }).toArray();
@@ -25,7 +22,7 @@ export default (db) => {
             const renderCard = (name, icon) => {
                 const activeReq = myRequests.find(r => r.activity === name);
                 
-                 if (activeReq) {
+                if (activeReq) {
                     const spotsLeft = activeReq.limit - (activeReq.participants ? activeReq.participants.length : 0);
                     return `
                     <div class="activity-card" style="border-left: 5px solid #28a745; background: #f8fff9;">
@@ -107,15 +104,12 @@ export default (db) => {
         } catch(error) { console.error(error); res.status(500).send("Ошибка."); }
     });
 
-    // ------------------------------------------
-    // 2. ОБРАБОТЧИК ПУБЛИКАЦИИ СБОРА
-    // ------------------------------------------
-    router.post("/publish", requireLogin, async (req, res) => {
+    router.post("/publish", requireLogin, async (req, res) => { 
         try {
             const { activity, limit } = req.body;
             const user = await db.collection("users").findOne({ _id: ObjectId.createFromHexString(req.session.user._id) });
             
-             await db.collection('activity_requests').deleteMany({ userId: user._id, activity: activity });
+            await db.collection('activity_requests').deleteMany({ userId: user._id, activity: activity });
 
             await db.collection('activity_requests').insertOne({
                 userId: user._id,
@@ -131,10 +125,7 @@ export default (db) => {
         } catch (e) { console.error(e); res.status(500).send("Ошибка публикации"); }
     });
 
-    // ------------------------------------------
-    // 3. ОБРАБОТЧИК УДАЛЕНИЯ СВОЕГО СБОРА
-    // ------------------------------------------
-    router.post("/delete-request", requireLogin, async (req, res) => {
+    router.post("/delete-request", requireLogin, async (req, res) => { 
         try {
             const { requestId } = req.body;
             await db.collection('activity_requests').deleteOne({ 
@@ -145,10 +136,7 @@ export default (db) => {
         } catch (e) { res.status(500).send("Ошибка удаления"); }
     });
 
-    // ------------------------------------------
-    // 4. ПУБЛИЧНАЯ СТРАНИЦА АКТИВНОСТИ (С формой сообщения)
-    // ------------------------------------------
-    router.get('/:activityName', requireLogin, async (req, res) => {
+    router.get('/:activityName', requireLogin, async (req, res) => { 
         try {
             const activityName = req.params.activityName; 
             if (['favicon.ico', 'publish', 'delete-request', 'join-request', 'sitemap.xml'].includes(activityName)) return res.status(404).send('Not found');
@@ -156,12 +144,17 @@ export default (db) => {
             const currentUserIdStr = req.session.user._id;
             const currentUser = await db.collection("users").findOne({ _id: ObjectId.createFromHexString(currentUserIdStr) });
 
-             let activeRequests = await db.collection('activity_requests').find({ 
-                activity: activityName, 
+            let activeRequests = await db.collection('activity_requests').find({ 
+                activity: activityName,
                 expiresAt: { $gt: new Date() }
             }).sort({ createdAt: -1 }).toArray();
 
-            activeRequests = activeRequests.filter(r => { 
+            // 👇 ИСПРАВЛЕНИЕ: Достаем данные авторов из базы, чтобы показать их на карточке
+            for (let reqData of activeRequests) {
+                reqData.authorProfile = await db.collection('users').findOne({ _id: reqData.userId }) || {};
+            }
+
+            activeRequests = activeRequests.filter(r => {
                 const isAuthor = r.userId.toString() === currentUserIdStr;
                 const hasSpace = r.participants.length < r.limit;
                 return isAuthor || hasSpace; 
@@ -191,11 +184,22 @@ export default (db) => {
                     </div>`;
                 }
 
+                // Данные организатора для вывода
+                const authorCity = reqData.authorProfile.city || 'Не указан';
+                const authorCountry = reqData.authorProfile.country ? `(${reqData.authorProfile.country})` : '';
+                const authorDays = (reqData.authorProfile.availability?.days || []).join(', ') || 'Любые';
+                const authorTime = reqData.authorProfile.availability?.time || 'Любое время';
+
                 // Если смотрит ДРУГОЙ пользователь, и он УЖЕ ЗАПИСАН:
                 if (hasJoined) {
                     return `
                     <div class="card" style="border-left: 4px solid #17a2b8;">
                         <div class="card-title">Организатор: ${reqData.userName}</div>
+                        <div style="background:#f8f9fa; padding:10px; border-radius:5px; margin-bottom:15px; font-size:13px; color:#555;">
+                            🌍 ${authorCity} ${authorCountry}<br>
+                            📅 Дни: ${authorDays}<br>
+                            ⏰ Время: ${authorTime}
+                        </div>
                         <p style="color:#17a2b8; font-weight:bold;">✅ Вы успешно записались!</p>
                         <p style="font-size:13px; color:#555;">Организатор свяжется с вами по указанному номеру.</p>
                     </div>`;
@@ -207,6 +211,13 @@ export default (db) => {
                     <div class="card-title">
                         Организатор: ${reqData.userName}
                     </div>
+                    
+                    <div style="background:#f8f9fa; padding:12px; border-radius:5px; margin-bottom:15px; font-size:14px; border-left: 3px solid #007BFF; color:#444;">
+                        🌍 <b>Город:</b> ${authorCity} ${authorCountry}<br>
+                        📅 <b>Удобные дни:</b> ${authorDays}<br>
+                        ⏰ <b>Время:</b> ${authorTime}
+                    </div>
+
                     <div class="card-info" style="color:#dc3545; font-weight:bold; margin-bottom:15px;">
                         🔥 Осталось мест: ${spotsLeft} из ${reqData.limit}
                     </div>
@@ -259,36 +270,33 @@ export default (db) => {
         } catch (error) { console.error(error); res.status(500).send('Ошибка.'); }
     });
 
-    // ------------------------------------------
-    // 5. ОБРАБОТЧИК ЗАПИСИ НА СБОР (С сохранением сообщения)
-    // ------------------------------------------
-    router.post('/join-request', requireLogin, async (req, res) => {
+    router.post('/join-request', requireLogin, async (req, res) => { 
         try {
             const { requestId, phone, message } = req.body;
             const uid = req.session.user._id;
             
-            await db.collection('users').updateOne( 
+            await db.collection('users').updateOne(
                 { _id: ObjectId.createFromHexString(uid) },
                 { $set: { phone: phone } }
             );
             req.session.user.phone = phone; 
             
-            await db.collection('activity_requests').updateOne( 
+            await db.collection('activity_requests').updateOne(
                 { _id: new ObjectId(requestId) },
                 { $push: { 
                     participants: { 
                         userId: uid, 
                         userName: req.session.user.name, 
                         phone: phone, 
-                        message: message || '', // Сохраняем сообщение участника
+                        message: message || '', 
                         joinedAt: new Date() 
                     } 
                 }}
             );
 
-            res.redirect(req.get('referer')); 
+            res.redirect(req.get('referer'));
         } catch (error) { console.error(error); res.status(500).send('Ошибка записи.'); }
     });
 
     return router;
-};
+}; 

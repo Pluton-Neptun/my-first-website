@@ -11,8 +11,7 @@ export default (db) => {
     const router = express.Router();
 
     router.get("/", requireLogin, async (req, res) => { 
-        try { 
-            // Отключаем кэш браузера, чтобы всегда была свежая версия
+        try {  
             res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');  
             
             const user = await db.collection('users').findOne({ _id: ObjectId.createFromHexString(req.session.user._id) });
@@ -74,13 +73,16 @@ export default (db) => {
                         
                         @keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
                         
-                        .checkbox-group label { display: inline-block; margin-right: 15px; cursor: pointer; }
+                        .checkbox-group { display: flex; flex-wrap: wrap; gap: 10px; margin: 10px 0 20px 0; }
+                        .checkbox-group label { background: rgba(255,255,255,0.1); padding: 8px 12px; border-radius: 5px; cursor: pointer; display: flex; align-items: center; gap: 5px; }
+                        .checkbox-group input { width: auto; margin: 0; }
                     
                         @media (max-width: 768px) {
                             body { background-attachment: scroll; background-position: center center; }
                             .content { width: 95%; margin: 10px auto; padding: 15px; }
                             button, .btn { padding: 15px; font-size: 18px; }
                             body { font-size: 16px; }
+                            .checkbox-group label { flex: 1 1 calc(25% - 10px); justify-content: center; }
                         }
                     </style>
                 </head>
@@ -113,18 +115,25 @@ export default (db) => {
                         <hr>
                         
                         <h3>Ваши данные:</h3> 
+                        <p style="text-align:center; font-size:12px; color:#aaa; margin-top:-10px;">Эти данные будут видны другим, когда вы создаете публикации.</p>
                         <form action="/profile/update-availability" method="POST">
                             <input type="hidden" name="_csrf" value="${res.locals.csrfToken}">
                             <label>Телефон:</label><input type="text" name="phone" value="${user.phone||''}" placeholder="+7...">
-                            <label>Город:</label><input type="text" name="city" value="${user.city||''}" placeholder="Город">
-                            <label>Страна:</label><input type="text" name="country" value="${user.country||''}" placeholder="Страна">
-                            <div class="checkbox-group" style="margin: 15px 0;">
-                                <label>Дни:</label>
+                            <label>Город:</label><input type="text" name="city" value="${user.city||''}" placeholder="Алматы, Астана...">
+                            <label>Страна:</label><input type="text" name="country" value="${user.country||''}" placeholder="Казахстан">
+                            
+                            <label style="display:block; margin-top:15px;">Удобные дни:</label>
+                            <div class="checkbox-group">
                                 <label><input type="checkbox" name="days" value="ПН" ${availability.days.includes('ПН')?'checked':''}>ПН</label>
+                                <label><input type="checkbox" name="days" value="ВТ" ${availability.days.includes('ВТ')?'checked':''}>ВТ</label>
                                 <label><input type="checkbox" name="days" value="СР" ${availability.days.includes('СР')?'checked':''}>СР</label>
+                                <label><input type="checkbox" name="days" value="ЧТ" ${availability.days.includes('ЧТ')?'checked':''}>ЧТ</label>
                                 <label><input type="checkbox" name="days" value="ПТ" ${availability.days.includes('ПТ')?'checked':''}>ПТ</label>
+                                <label><input type="checkbox" name="days" value="СБ" ${availability.days.includes('СБ')?'checked':''}>СБ</label>
+                                <label><input type="checkbox" name="days" value="ВС" ${availability.days.includes('ВС')?'checked':''}>ВС</label>
                             </div>
-                            <label>Удобное время:</label><input type="text" name="time" value="${availability.time||''}" placeholder="18:00 - 20:00">
+                            
+                            <label>Удобное время:</label><input type="text" name="time" value="${availability.time||''}" placeholder="Например: После 18:00">
                             <button type="submit">Сохранить</button>
                         </form>
                         
