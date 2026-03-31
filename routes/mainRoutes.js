@@ -8,7 +8,8 @@ function isImage(filename) { return filename && filename.match(/\.(jpg|jpeg|png|
 export default (db) => {
     const router = express.Router();
 
-    const ADMIN_EMAIL = 'tin@mail.ru'; 
+    // 👇 ВПИШИ СЮДА СВОЙ EMAIL (АДМИН)
+    const ADMIN_EMAIL = 'tin@mail.ru'; // <--- ИЗМЕНИ НА СВОЮ ПОЧТУ
 
     router.get('/clear-cache-now', async (req, res) => {
         try {
@@ -26,6 +27,8 @@ export default (db) => {
             if (type === 'comment') await db.collection('comments').deleteOne({ _id: new ObjectId(id) });
             else if (type === 'feedback') await db.collection('feedback').deleteOne({ _id: new ObjectId(id) });
             else if (type === 'restaurant') await db.collection('restaurants').deleteOne({ _id: new ObjectId(id) });
+            // 👇 ИСПРАВЛЕНИЕ: Добавили удаление картинок (tasks)
+            else if (type === 'task') await db.collection('tasks').deleteOne({ _id: new ObjectId(id) });
 
             await clearCache(LOGIN_PAGE_CACHE_KEY);
             res.json({ status: 'ok' }); 
@@ -36,7 +39,7 @@ export default (db) => {
         if (!req.session || !req.session.user) {
             return res.status(401).json({ error: 'Нужна авторизация' });
         }
-        try { 
+        try {
             const { toUserId, imageId, messageText, contactInfo, source } = req.body;
             let receiverId; 
             try { receiverId = new ObjectId(toUserId); } 
@@ -105,8 +108,7 @@ export default (db) => {
         } catch (e) { console.error(e); res.status(500).send("Ошибка при добавлении ресторана"); }
     });
 
-    // 👇 ИСПРАВЛЕНИЕ: Бэкенд теперь отвечает JSON-ом, а не перезагружает страницу
-    router.post('/submit-feedback', async (req, res) => {
+    router.post('/submit-feedback', async (req, res) => { 
         try {
             const { feedbackText, contactInfo } = req.body;
             if (feedbackText && feedbackText.trim() !== '') {
@@ -215,8 +217,12 @@ export default (db) => {
                 else if (t.status === 'ride') statusHtml = `<div class="status-label status-ride">Прокатиться 🚗</div>`;
                 else statusHtml = `<div class="status-label status-busy">Временно занята</div>`;
                 
+                // 👇 ИСПРАВЛЕНИЕ: Крестик для админа прямо на картинке
+                let adminDeletePhotoBtn = isAdmin ? `<div onclick="if(event) event.stopPropagation(); adminDelete('task', '${t._id}', this)" style="position:absolute; top:-5px; right:-5px; background:red; color:white; border-radius:50%; width:20px; height:20px; display:flex; justify-content:center; align-items:center; font-size:10px; cursor:pointer; z-index:10; box-shadow: 0 0 5px black;" title="Удалить фото">❌</div>` : '';
+
                 return `
-                    <div class="gallery-wrapper" onclick="openModal('${t._id}', '${t.userId}', this.querySelector('img').src, '${t.originalName}')">
+                    <div class="gallery-wrapper" style="position: relative;" onclick="openModal('${t._id}', '${t.userId}', this.querySelector('img').src, '${t.originalName}')">
+                        ${adminDeletePhotoBtn}
                         <div class="gallery-item work-border" title="Нажмите, чтобы открыть">${content}</div>
                         ${statusHtml}
                     </div>
@@ -248,7 +254,7 @@ export default (db) => {
                 `;
             }
 
-            const emojiPickerHtml = currentUser ? ` 
+            const emojiPickerHtml = currentUser ? `
                 <div id="emojiPickerBar" class="emoji-picker" style="display: none; margin: 5px 0; font-size: 22px; text-align: center; user-select: none; transition: 0.3s;">
                     <span onclick="addEmoji('👍')" style="cursor:pointer; margin: 0 4px;">👍</span>
                     <span onclick="addEmoji('🔥')" style="cursor:pointer; margin: 0 4px;">🔥</span>
@@ -319,7 +325,7 @@ export default (db) => {
                         .custom-scrollbar::-webkit-scrollbar-track { background: rgba(255,255,255,0.1); border-radius: 5px; }
                         .custom-scrollbar::-webkit-scrollbar-thumb { background: #888; border-radius: 5px; }
                         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #555; }
- 
+
                         .emoji-picker span { transition: transform 0.2s; display: inline-block; }
                         .emoji-picker span:hover { transform: scale(1.3); }
 
@@ -451,7 +457,7 @@ export default (db) => {
 
                     <script>
                         let currentToUserId = ''; let currentImageId = '';
- 
+
                         function showEmojiPicker() {
                             const picker = document.getElementById('emojiPickerBar');
                             if (picker) {
@@ -459,7 +465,7 @@ export default (db) => {
                             }
                         }
 
-                        function addEmoji(emoji) { 
+                        function addEmoji(emoji) {
                             const input = document.getElementById('feedbackInput');
                             if (input) {
                                 input.value += emoji;
@@ -467,9 +473,8 @@ export default (db) => {
                             }
                         }
 
-                        // 👇 ИСПРАВЛЕНИЕ: Функция для отправки пожелания без перезагрузки
-                        async function submitFeedback(e) {
-                            e.preventDefault(); // Останавливаем стандартную отправку
+                        async function submitFeedback(e) { 
+                            e.preventDefault(); 
                             const form = e.target;
                             const btn = form.querySelector('button');
                             const contactInfo = form.contactInfo.value;
@@ -486,14 +491,14 @@ export default (db) => {
                             });
 
                             if (res.ok) {
-                                form.feedbackText.value = ''; // Очищаем поле
+                                form.feedbackText.value = ''; 
                                 btn.innerText = 'Отправлено! ✔️';
-                                btn.style.background = '#28a745'; // Делаем кнопку зеленой на секунду
+                                btn.style.background = '#28a745'; 
                                 
                                 setTimeout(() => {
                                     btn.disabled = false;
                                     btn.innerText = 'Отправить идею';
-                                    btn.style.background = '#007BFF'; // Возвращаем синий цвет
+                                    btn.style.background = '#007BFF'; 
                                 }, 2500);
                             } else {
                                 alert('Ошибка отправки.');
@@ -502,6 +507,7 @@ export default (db) => {
                             }
                         }
 
+                        // 👇 ИСПРАВЛЕНИЕ: Функция удаления обновлена, чтобы скрывать картинку из галереи
                         async function adminDelete(type, id, btn) { 
                             if (!confirm('Точно удалить этот контент?')) return;
                             const res = await fetch('/admin-delete', {
@@ -510,7 +516,8 @@ export default (db) => {
                                 body: JSON.stringify({ type, id })
                             });
                             if (res.ok) {
-                                const element = btn.closest('.comment') || btn.closest('div[style*="rgba(255,152,0,0.1)"]') || btn.closest('div[style*="rgba(255,255,255,0.1)"]');
+                                // Ищем карточку коммента, ресторана или фотку галереи
+                                const element = btn.closest('.comment') || btn.closest('div[style*="rgba(255,152,0,0.1)"]') || btn.closest('div[style*="rgba(255,255,255,0.1)"]') || btn.closest('.gallery-wrapper');
                                 if (element) element.remove();
                             } else {
                                 alert('Произошла ошибка при удалении.');
