@@ -299,4 +299,4 @@ export default (db) => {
     });
 
     return router;
-}; 
+};  
