@@ -11,7 +11,7 @@ export default (db) => {
     const router = express.Router();
 
     router.get("/", requireLogin, async (req, res) => { 
-        try {  
+        try { 
             res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');  
             
             const user = await db.collection('users').findOne({ _id: ObjectId.createFromHexString(req.session.user._id) });
@@ -115,12 +115,15 @@ export default (db) => {
                         <hr>
                         
                         <h3>Ваши данные:</h3> 
-                        <p style="text-align:center; font-size:12px; color:#aaa; margin-top:-10px;">Эти данные будут видны другим, когда вы создаете публикации.</p>
+                        <p style="text-align:center; font-size:12px; color:#aaa; margin-top:-10px;">Для публикации сборов заполните все поля.</p>
                         <form action="/profile/update-availability" method="POST">
                             <input type="hidden" name="_csrf" value="${res.locals.csrfToken}">
-                            <label>Телефон:</label><input type="text" name="phone" value="${user.phone||''}" placeholder="+7...">
-                            <label>Город:</label><input type="text" name="city" value="${user.city||''}" placeholder="Алматы, Астана...">
-                            <label>Страна:</label><input type="text" name="country" value="${user.country||''}" placeholder="Казахстан">
+                            <label>Телефон / WhatsApp:</label><input type="text" name="phone" value="${user.phone||''}" placeholder="+7..." required>
+                            <label>Город:</label><input type="text" name="city" value="${user.city||''}" placeholder="Алматы, Астана..." required>
+                            <label>Страна (необязательно):</label><input type="text" name="country" value="${user.country||''}" placeholder="Казахстан">
+                            
+                            <label>Место проведения (по умолчанию):</label>
+                            <input type="text" name="venue" value="${user.venue||''}" placeholder="Например: Парк Горького, Стадион Спартак..." required style="border-left: 3px solid #00bcd4;">
                             
                             <label style="display:block; margin-top:15px;">Удобные дни:</label>
                             <div class="checkbox-group">
@@ -133,7 +136,7 @@ export default (db) => {
                                 <label><input type="checkbox" name="days" value="ВС" ${availability.days.includes('ВС')?'checked':''}>ВС</label>
                             </div>
                             
-                            <label>Удобное время:</label><input type="text" name="time" value="${availability.time||''}" placeholder="Например: После 18:00">
+                            <label>Удобное время:</label><input type="text" name="time" value="${availability.time||''}" placeholder="Например: После 18:00" required>
                             <button type="submit">Сохранить</button>
                         </form>
                         
@@ -209,11 +212,12 @@ export default (db) => {
         `);
     });
 
+    // 👇 ИСПРАВЛЕНИЕ: Сохраняем поле venue (Место) в базу данных
     router.post('/update-availability', requireLogin, async (req, res) => { 
         const days = Array.isArray(req.body.days) ? req.body.days : (req.body.days ? [req.body.days] : []);
         await db.collection('users').updateOne(
             { _id: ObjectId.createFromHexString(req.session.user._id) }, 
-            { $set: { phone: req.body.phone, city: req.body.city, country: req.body.country, availability: { days, time: req.body.time } } }
+            { $set: { phone: req.body.phone, city: req.body.city, country: req.body.country, venue: req.body.venue, availability: { days, time: req.body.time } } }
         );
         res.redirect('/profile');
     });

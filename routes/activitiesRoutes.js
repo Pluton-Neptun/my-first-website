@@ -9,15 +9,19 @@ const requireLogin = (req, res, next) => {
 export default (db) => {
     const router = express.Router();
 
-    router.get("/", requireLogin, async (req, res) => { 
+    router.get("/", requireLogin, async (req, res) => {
         try {
             res.set('Cache-Control', 'public, max-age=0, must-revalidate');  
             const uid = ObjectId.createFromHexString(req.session.user._id);
+            const user = await db.collection("users").findOne({ _id: uid });
             
             const myRequests = await db.collection('activity_requests').find({ 
                 userId: uid, 
                 expiresAt: { $gt: new Date() } 
             }).toArray();
+
+            // 👇 ИСПРАВЛЕНИЕ: Проверяем, заполнил ли человек все обязательные данные
+            const isProfileComplete = user.phone && user.city && user.venue && user.availability && user.availability.days && user.availability.days.length > 0 && user.availability.time;
 
             const renderCard = (name, icon) => {
                 const activeReq = myRequests.find(r => r.activity === name);
@@ -42,6 +46,18 @@ export default (db) => {
                         </form>
                     </div>`;
                 } else {
+                    // 👇 ИСПРАВЛЕНИЕ: Блокируем публикацию, если профиль не заполнен
+                    if (!isProfileComplete) {
+                        return `
+                        <div class="activity-card">
+                            <div class="activity-header"><span class="activity-title" style="color:#777;">${icon} ${name}</span></div>
+                            <div style="background:#fff3cd; border: 1px solid #ffeeba; color:#856404; padding:12px; border-radius:5px; font-size:14px; text-align:center;">
+                                ⚠️ Чтобы опубликовать сбор, <a href="/profile" style="color:#856404; font-weight:bold; text-decoration:underline;">заполните Ваши данные</a> в Кабинете (Телефон, Город, Место, Дни, Время).
+                            </div>
+                        </div>`;
+                    }
+
+                    // Если все ок - показываем форму публикации
                     return `
                     <div class="activity-card">
                         <div class="activity-header">
@@ -104,11 +120,15 @@ export default (db) => {
         } catch(error) { console.error(error); res.status(500).send("Ошибка."); }
     });
 
-    router.post("/publish", requireLogin, async (req, res) => { 
+    router.post("/publish", requireLogin, async (req, res) => {
         try {
             const { activity, limit } = req.body;
             const user = await db.collection("users").findOne({ _id: ObjectId.createFromHexString(req.session.user._id) });
             
+            // Защита и на бэкенде: если хакер шлет POST без заполненного профиля
+            const isProfileComplete = user.phone && user.city && user.venue && user.availability && user.availability.days && user.availability.days.length > 0 && user.availability.time;
+            if (!isProfileComplete) return res.status(403).send("Сначала заполните данные в профиле.");
+
             await db.collection('activity_requests').deleteMany({ userId: user._id, activity: activity });
 
             await db.collection('activity_requests').insertOne({
@@ -125,7 +145,7 @@ export default (db) => {
         } catch (e) { console.error(e); res.status(500).send("Ошибка публикации"); }
     });
 
-    router.post("/delete-request", requireLogin, async (req, res) => { 
+    router.post("/delete-request", requireLogin, async (req, res) => {
         try {
             const { requestId } = req.body;
             await db.collection('activity_requests').deleteOne({ 
@@ -136,7 +156,7 @@ export default (db) => {
         } catch (e) { res.status(500).send("Ошибка удаления"); }
     });
 
-    router.get('/:activityName', requireLogin, async (req, res) => { 
+    router.get('/:activityName', requireLogin, async (req, res) => {
         try {
             const activityName = req.params.activityName; 
             if (['favicon.ico', 'publish', 'delete-request', 'join-request', 'sitemap.xml'].includes(activityName)) return res.status(404).send('Not found');
@@ -149,8 +169,7 @@ export default (db) => {
                 expiresAt: { $gt: new Date() }
             }).sort({ createdAt: -1 }).toArray();
 
-            // 👇 ИСПРАВЛЕНИЕ: Достаем данные авторов из базы, чтобы показать их на карточке
-            for (let reqData of activeRequests) {
+            for (let reqData of activeRequests) { 
                 reqData.authorProfile = await db.collection('users').findOne({ _id: reqData.userId }) || {};
             }
 
@@ -165,8 +184,7 @@ export default (db) => {
                 const spotsLeft = reqData.limit - reqData.participants.length;
                 const hasJoined = reqData.participants.some(p => p.userId === currentUserIdStr);
 
-                // Если смотрит АВТОР сбора:
-                if (isAuthor) {
+                if (isAuthor) { 
                     let partsHtml = reqData.participants.map(p => 
                         `<div style="background:#eee; padding:10px; border-radius:5px; margin-bottom:8px; font-size:14px; border-left:3px solid #007BFF;">
                             👤 <b>${p.userName}</b><br>📞 <a href="tel:${p.phone}" style="color:#007BFF; font-weight:bold;">${p.phone}</a>
@@ -183,20 +201,20 @@ export default (db) => {
                         ${partsHtml}
                     </div>`;
                 }
-
-                // Данные организатора для вывода
+ 
                 const authorCity = reqData.authorProfile.city || 'Не указан';
                 const authorCountry = reqData.authorProfile.country ? `(${reqData.authorProfile.country})` : '';
+                const authorVenue = reqData.authorProfile.venue || 'Не указано'; // ИСПРАВЛЕНИЕ: Берем Место
                 const authorDays = (reqData.authorProfile.availability?.days || []).join(', ') || 'Любые';
                 const authorTime = reqData.authorProfile.availability?.time || 'Любое время';
 
-                // Если смотрит ДРУГОЙ пользователь, и он УЖЕ ЗАПИСАН:
-                if (hasJoined) {
+                if (hasJoined) { 
                     return `
                     <div class="card" style="border-left: 4px solid #17a2b8;">
                         <div class="card-title">Организатор: ${reqData.userName}</div>
                         <div style="background:#f8f9fa; padding:10px; border-radius:5px; margin-bottom:15px; font-size:13px; color:#555;">
                             🌍 ${authorCity} ${authorCountry}<br>
+                            📍 Место: ${authorVenue}<br>
                             📅 Дни: ${authorDays}<br>
                             ⏰ Время: ${authorTime}
                         </div>
@@ -205,8 +223,7 @@ export default (db) => {
                     </div>`;
                 }
 
-                // Если смотрит ДРУГОЙ пользователь, и есть СВОБОДНЫЕ МЕСТА:
-                return `
+                return ` 
                 <div class="card">
                     <div class="card-title">
                         Организатор: ${reqData.userName}
@@ -214,6 +231,7 @@ export default (db) => {
                     
                     <div style="background:#f8f9fa; padding:12px; border-radius:5px; margin-bottom:15px; font-size:14px; border-left: 3px solid #007BFF; color:#444;">
                         🌍 <b>Город:</b> ${authorCity} ${authorCountry}<br>
+                        📍 <b>Место:</b> ${authorVenue}<br>
                         📅 <b>Удобные дни:</b> ${authorDays}<br>
                         ⏰ <b>Время:</b> ${authorTime}
                     </div>
@@ -270,7 +288,7 @@ export default (db) => {
         } catch (error) { console.error(error); res.status(500).send('Ошибка.'); }
     });
 
-    router.post('/join-request', requireLogin, async (req, res) => { 
+    router.post('/join-request', requireLogin, async (req, res) => {
         try {
             const { requestId, phone, message } = req.body;
             const uid = req.session.user._id;
@@ -299,4 +317,4 @@ export default (db) => {
     });
 
     return router;
-};  
+};
