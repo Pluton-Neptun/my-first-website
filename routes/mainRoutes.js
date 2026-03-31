@@ -8,8 +8,7 @@ function isImage(filename) { return filename && filename.match(/\.(jpg|jpeg|png|
 export default (db) => {
     const router = express.Router();
 
-    // 👇 ВПИШИ СЮДА СВОЙ EMAIL (АДМИН)
-    const ADMIN_EMAIL = 'tin@mail.ru'; // <--- ИЗМЕНИ НА СВОЮ ПОЧТУ
+    const ADMIN_EMAIL = 'tin@mail.ru'; 
 
     router.get('/clear-cache-now', async (req, res) => {
         try {
@@ -26,8 +25,7 @@ export default (db) => {
             const { type, id } = req.body;
             if (type === 'comment') await db.collection('comments').deleteOne({ _id: new ObjectId(id) });
             else if (type === 'feedback') await db.collection('feedback').deleteOne({ _id: new ObjectId(id) });
-            else if (type === 'restaurant') await db.collection('restaurants').deleteOne({ _id: new ObjectId(id) });
-            // 👇 ИСПРАВЛЕНИЕ: Добавили удаление картинок (tasks)
+             else if (type === 'restaurant') await db.collection('restaurants').deleteOne({ _id: new ObjectId(id) });
             else if (type === 'task') await db.collection('tasks').deleteOne({ _id: new ObjectId(id) });
 
             await clearCache(LOGIN_PAGE_CACHE_KEY);
@@ -108,7 +106,7 @@ export default (db) => {
         } catch (e) { console.error(e); res.status(500).send("Ошибка при добавлении ресторана"); }
     });
 
-    router.post('/submit-feedback', async (req, res) => { 
+    router.post('/submit-feedback', async (req, res) => {
         try {
             const { feedbackText, contactInfo } = req.body;
             if (feedbackText && feedbackText.trim() !== '') {
@@ -217,8 +215,7 @@ export default (db) => {
                 else if (t.status === 'ride') statusHtml = `<div class="status-label status-ride">Прокатиться 🚗</div>`;
                 else statusHtml = `<div class="status-label status-busy">Временно занята</div>`;
                 
-                // 👇 ИСПРАВЛЕНИЕ: Крестик для админа прямо на картинке
-                let adminDeletePhotoBtn = isAdmin ? `<div onclick="if(event) event.stopPropagation(); adminDelete('task', '${t._id}', this)" style="position:absolute; top:-5px; right:-5px; background:red; color:white; border-radius:50%; width:20px; height:20px; display:flex; justify-content:center; align-items:center; font-size:10px; cursor:pointer; z-index:10; box-shadow: 0 0 5px black;" title="Удалить фото">❌</div>` : '';
+                 let adminDeletePhotoBtn = isAdmin ? `<div onclick="if(event) event.stopPropagation(); adminDelete('task', '${t._id}', this)" style="position:absolute; top:-5px; right:-5px; background:red; color:white; border-radius:50%; width:20px; height:20px; display:flex; justify-content:center; align-items:center; font-size:10px; cursor:pointer; z-index:10; box-shadow: 0 0 5px black;" title="Удалить фото">❌</div>` : '';
 
                 return `
                     <div class="gallery-wrapper" style="position: relative;" onclick="openModal('${t._id}', '${t.userId}', this.querySelector('img').src, '${t.originalName}')">
@@ -282,8 +279,11 @@ export default (db) => {
                       .second-page { background: rgba(0, 0, 0, 0.4); display: flex; flex-direction: column; justify-content: center; align-items: center; }
                         .scroll-hint { position: absolute; bottom: 20px; color: white; font-size: 24px; animation: bounce 2s infinite; opacity: 0.7; z-index: 10; pointer-events: none;}
                         @keyframes bounce { 0%, 20%, 50%, 80%, 100% {transform: translateY(0);} 40% {transform: translateY(-10px);} 60% {transform: translateY(-5px);} }
-                        .main-wrapper { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; max-width: 1200px; width: 100%; }
-                        .block { background: rgba(0,0,0,0.7); color: white; padding: 20px; border-radius: 8px; width: 100%; max-width: 340px; margin-bottom: 20px; box-sizing: border-box; }
+                        
+                        /* 👇 ИСПРАВЛЕНИЕ: Расширили контейнер и ужали блоки, чтобы влезло 4 в ряд */
+                        .main-wrapper { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; max-width: 1400px; width: 100%; }
+                        .block { background: rgba(0,0,0,0.7); color: white; padding: 20px; border-radius: 8px; width: 100%; max-width: 320px; margin-bottom: 20px; box-sizing: border-box; }
+                        
                         input, button { width: 100%; padding: 12px; margin-bottom: 10px; border-radius: 5px; box-sizing: border-box; font-size: 16px; } 
                       button { background: #007BFF; color: white; border: none; cursor: pointer; font-weight: bold;}
                         .gallery-grid { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; } 
@@ -473,7 +473,7 @@ export default (db) => {
                             }
                         }
 
-                        async function submitFeedback(e) { 
+                        async function submitFeedback(e) {
                             e.preventDefault(); 
                             const form = e.target;
                             const btn = form.querySelector('button');
@@ -506,8 +506,7 @@ export default (db) => {
                                 btn.innerText = 'Отправить идею';
                             }
                         }
-
-                        // 👇 ИСПРАВЛЕНИЕ: Функция удаления обновлена, чтобы скрывать картинку из галереи
+ 
                         async function adminDelete(type, id, btn) { 
                             if (!confirm('Точно удалить этот контент?')) return;
                             const res = await fetch('/admin-delete', {
@@ -515,8 +514,7 @@ export default (db) => {
                                 headers: {'Content-Type': 'application/json', 'x-csrf-token': "${res.locals.csrfToken}"},
                                 body: JSON.stringify({ type, id })
                             });
-                            if (res.ok) {
-                                // Ищем карточку коммента, ресторана или фотку галереи
+                            if (res.ok) { 
                                 const element = btn.closest('.comment') || btn.closest('div[style*="rgba(255,152,0,0.1)"]') || btn.closest('div[style*="rgba(255,255,255,0.1)"]') || btn.closest('.gallery-wrapper');
                                 if (element) element.remove();
                             } else {
