@@ -3,7 +3,7 @@ import { ObjectId } from 'mongodb';
 import { getCache, setCache, clearCache, LOGIN_PAGE_CACHE_KEY } from '../cacheService.js';
 // 👇 ИСПРАВЛЕНИЕ: Подключаем новую Службу Афиши
 import { getAfisha } from '../services/activityService.js';
-
+import { getThirdSectionHtml } from '../views/thirdSection.js';
 function isImage(filename) { return filename && filename.match(/\.(jpg|jpeg|png|gif|webp)$/i); }
 
 export default (db) => {
@@ -482,6 +482,8 @@ export default (db) => {
                         </div>
                     </div>
 
+                    ${getThirdSectionHtml()}  
+                        
                     <script>
                         let currentToUserId = ''; let currentImageId = '';
 
