@@ -1,7 +1,8 @@
 import express from 'express';
 import { ObjectId } from 'mongodb'; 
 import { getCache, setCache, clearCache, LOGIN_PAGE_CACHE_KEY } from '../cacheService.js';
-import { checkLimitsAndGetCounts } from '../services/activityService.js';
+// 👇 ИСПРАВЛЕНИЕ: Подключаем новую Службу Афиши
+import { getAfisha } from '../services/activityService.js';
 
 function isImage(filename) { return filename && filename.match(/\.(jpg|jpeg|png|gif|webp)$/i); }
 
@@ -25,7 +26,7 @@ export default (db) => {
             const { type, id } = req.body;
             if (type === 'comment') await db.collection('comments').deleteOne({ _id: new ObjectId(id) });
             else if (type === 'feedback') await db.collection('feedback').deleteOne({ _id: new ObjectId(id) });
-             else if (type === 'restaurant') await db.collection('restaurants').deleteOne({ _id: new ObjectId(id) });
+            else if (type === 'restaurant') await db.collection('restaurants').deleteOne({ _id: new ObjectId(id) });
             else if (type === 'task') await db.collection('tasks').deleteOne({ _id: new ObjectId(id) });
 
             await clearCache(LOGIN_PAGE_CACHE_KEY);
@@ -130,12 +131,16 @@ export default (db) => {
             
             let pageData = await getCache(LOGIN_PAGE_CACHE_KEY); 
             
-            if (!pageData || !pageData.restaurants || !pageData.feedbacks) {
+            if (!pageData || !pageData.restaurants || !pageData.feedbacks || !pageData.afisha) {
                 const comments = await db.collection("comments").find().sort({ createdAt: -1 }).toArray(); 
                 const tasks = await db.collection('tasks').find().sort({ createdAt: -1 }).toArray(); 
                 const restaurants = await db.collection('restaurants').find().sort({ createdAt: -1 }).toArray(); 
                 const feedbacks = await db.collection('feedback').find().sort({ createdAt: -1 }).limit(15).toArray(); 
-                pageData = { comments, tasks, restaurants, feedbacks }; 
+                
+                // 👇 ИСПРАВЛЕНИЕ: Вызываем нашу новую Службу Афиши!
+                const afisha = await getAfisha(db);
+
+                pageData = { comments, tasks, restaurants, feedbacks, afisha }; 
                 await setCache(LOGIN_PAGE_CACHE_KEY, pageData); 
             }
  
@@ -194,6 +199,24 @@ export default (db) => {
 
             const restaurantsContainer = `<div style="max-height: 250px; overflow-y: auto; padding-right: 5px;" class="custom-scrollbar">${restaurantsHtml}</div>`;
 
+            let afishaHtml = (pageData.afisha || []).map(act => {
+                const dateStr = new Date(act.createdAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+                return `
+                <div style="background: rgba(33,150,243,0.1); padding: 12px; margin-bottom: 10px; border-radius: 5px; border-left: 4px solid #2196f3;">
+                    <div style="font-size: 14px; margin-bottom: 5px;">
+                        <b style="color: #6cafff;">${act.userName}</b> искал компанию:
+                    </div>
+                    <div style="font-size: 16px; font-weight: bold; color: white; margin-bottom: 5px;">
+                        🎯 ${act.activity}
+                    </div>
+                    <div style="font-size: 11px; color: #aaa;">
+                        🕒 Создано: ${dateStr}
+                    </div>
+                </div>`;
+            }).join('') || '<p style="text-align:center; color:#777; font-size: 14px;">За последние 3 дня сборов не было.</p>';
+
+            const afishaContainer = `<div style="max-height: 250px; overflow-y: auto; padding-right: 5px;" class="custom-scrollbar">${afishaHtml}</div>`;
+
             let feedbacksHtml = (pageData.feedbacks || []).map(f => `
                 <div style="background: rgba(255,255,255,0.1); padding: 10px; margin-bottom: 5px; border-radius: 5px; font-size: 13px; border-left: 3px solid #6cafff;">
                     <b style="color: #6cafff;">${f.contact}</b>${getDeleteBtn('feedback', f._id)}: <span style="color:#eee;">${f.text}</span>
@@ -215,7 +238,7 @@ export default (db) => {
                 else if (t.status === 'ride') statusHtml = `<div class="status-label status-ride">Прокатиться 🚗</div>`;
                 else statusHtml = `<div class="status-label status-busy">Временно занята</div>`;
                 
-                 let adminDeletePhotoBtn = isAdmin ? `<div onclick="if(event) event.stopPropagation(); adminDelete('task', '${t._id}', this)" style="position:absolute; top:-5px; right:-5px; background:red; color:white; border-radius:50%; width:20px; height:20px; display:flex; justify-content:center; align-items:center; font-size:10px; cursor:pointer; z-index:10; box-shadow: 0 0 5px black;" title="Удалить фото">❌</div>` : '';
+                let adminDeletePhotoBtn = isAdmin ? `<div onclick="if(event) event.stopPropagation(); adminDelete('task', '${t._id}', this)" style="position:absolute; top:-5px; right:-5px; background:red; color:white; border-radius:50%; width:20px; height:20px; display:flex; justify-content:center; align-items:center; font-size:10px; cursor:pointer; z-index:10; box-shadow: 0 0 5px black;" title="Удалить фото">❌</div>` : '';
 
                 return `
                     <div class="gallery-wrapper" style="position: relative;" onclick="openModal('${t._id}', '${t.userId}', this.querySelector('img').src, '${t.originalName}')">
@@ -280,8 +303,7 @@ export default (db) => {
                         .scroll-hint { position: absolute; bottom: 20px; color: white; font-size: 24px; animation: bounce 2s infinite; opacity: 0.7; z-index: 10; pointer-events: none;}
                         @keyframes bounce { 0%, 20%, 50%, 80%, 100% {transform: translateY(0);} 40% {transform: translateY(-10px);} 60% {transform: translateY(-5px);} }
                         
-                        /* 👇 ИСПРАВЛЕНИЕ: Расширили контейнер и ужали блоки, чтобы влезло 4 в ряд */
-                        .main-wrapper { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; max-width: 1400px; width: 100%; }
+                         .main-wrapper { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; max-width: 1400px; width: 100%; }
                         .block { background: rgba(0,0,0,0.7); color: white; padding: 20px; border-radius: 8px; width: 100%; max-width: 320px; margin-bottom: 20px; box-sizing: border-box; }
                         
                         input, button { width: 100%; padding: 12px; margin-bottom: 10px; border-radius: 5px; box-sizing: border-box; font-size: 16px; } 
@@ -437,6 +459,11 @@ export default (db) => {
                                     `<p style="font-size:13px; color:#aaa; text-align:center; margin-top:15px;">Войдите, чтобы предложить ресторан</p>`
                                 }
                             </div>
+                            
+                            <div class="block">
+                                <h3 style="color:#2196f3;">📅 Афиша (за 3 дня)</h3>
+                                ${afishaContainer}
+                            </div>
 
                       </div>
                         <div class="scroll-hint">⬇</div>
@@ -506,7 +533,7 @@ export default (db) => {
                                 btn.innerText = 'Отправить идею';
                             }
                         }
- 
+
                         async function adminDelete(type, id, btn) { 
                             if (!confirm('Точно удалить этот контент?')) return;
                             const res = await fetch('/admin-delete', {
@@ -514,7 +541,7 @@ export default (db) => {
                                 headers: {'Content-Type': 'application/json', 'x-csrf-token': "${res.locals.csrfToken}"},
                                 body: JSON.stringify({ type, id })
                             });
-                            if (res.ok) { 
+                            if (res.ok) {
                                 const element = btn.closest('.comment') || btn.closest('div[style*="rgba(255,152,0,0.1)"]') || btn.closest('div[style*="rgba(255,255,255,0.1)"]') || btn.closest('.gallery-wrapper');
                                 if (element) element.remove();
                             } else {
