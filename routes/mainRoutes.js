@@ -483,7 +483,7 @@ export default (db) => {
                     </div>
 
                     ${getThirdSectionHtml()}  
-                        
+
                     <script>
                         let currentToUserId = ''; let currentImageId = '';
 
