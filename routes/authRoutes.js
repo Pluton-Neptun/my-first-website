@@ -1,6 +1,8 @@
 import express from 'express'; 
+import crypto from 'crypto'; // Встроенный модуль для генерации случайных токенов
 import { clearCache, LOGIN_PAGE_CACHE_KEY } from '../cacheService.js'; 
 import registerLimiter from '../middleware/limiter.js';  
+import { sendVerificationEmail } from '../services/emailService.js'; // Наш почтальон
 
 export default (db) => {
     const router = express.Router();
@@ -65,16 +67,32 @@ export default (db) => {
                 </body>`);
             }
 
+            // Генерируем уникальный токен из 64 символов
+            const verificationToken = crypto.randomBytes(32).toString('hex');
+
             await db.collection("users").insertOne({  
                 name: req.body.name, 
                 email: req.body.email, 
                 password: req.body.password, 
                 activities: [], 
+                isVerified: false,               // Флаг: почта не подтверждена
+                verificationToken: verificationToken, // Сохраняем токен в базу
                 createdAt: new Date() 
             });
 
+            // Отправляем письмо с токеном
+            await sendVerificationEmail(req.body.email, verificationToken);
             await clearCache(LOGIN_PAGE_CACHE_KEY); 
-            res.redirect('/login');
+            
+            // Выводим сообщение об успешной отправке
+            res.send(`
+                <body style="background:#333;color:white;text-align:center;padding-top:50px;font-family:Arial;font-size:18px;">
+                    <h2>📧 Письмо отправлено!</h2>
+                    <p style="color:#ccc;">Мы отправили ссылку для подтверждения на <b>${req.body.email}</b>.</p>
+                    <p style="color:#aaa; font-size:14px;">Пожалуйста, проверьте папку "Спам", если письма долго нет.</p>
+                    <br><a href="/login" style="color:#6cafff;padding:15px;border:1px solid #6cafff;border-radius:5px;text-decoration:none;">Вернуться ко входу</a>
+                </body>
+            `);
 
         } catch (e) { 
             console.error(e);
@@ -83,7 +101,48 @@ export default (db) => {
     });
 
     // ==================================================
-    // 2. ВХОД
+    // 2. АКТИВАЦИЯ АККАУНТА (КЛИК ИЗ ПИСЬМА)
+    // ==================================================
+    router.get('/verify/:token', async (req, res) => {
+        try {
+            const { token } = req.params;
+            const user = await db.collection('users').findOne({ verificationToken: token });
+
+            if (!user) {
+                return res.send(`
+                    <body style="background:#333;color:white;text-align:center;padding-top:50px;font-family:Arial;font-size:18px;">
+                        <h2 style="color: #ff4c4c;">⛔ Неверная или устаревшая ссылка!</h2>
+                        <p style="color:#ccc;">Возможно, вы уже активировали аккаунт ранее.</p>
+                        <br><a href="/login" style="color:#6cafff;padding:15px;border:1px solid #6cafff;border-radius:5px;text-decoration:none;">Перейти ко входу</a>
+                    </body>
+                `);
+            }
+
+            // Активируем пользователя
+            await db.collection('users').updateOne(
+                { _id: user._id },
+                { 
+                    $set: { isVerified: true },
+                    $unset: { verificationToken: "" } // Удаляем токен, чтобы он стал одноразовым
+                }
+            );
+
+            res.send(`
+                <body style="background:#333;color:white;text-align:center;padding-top:50px;font-family:Arial;font-size:18px;">
+                    <h2 style="color: #28a745;">✅ Аккаунт успешно подтвержден!</h2>
+                    <p style="color:#ccc;">Добро пожаловать, ${user.name}! Теперь вы можете войти на сайт.</p>
+                    <br><br>
+                    <a href="/login" style="color:white;background:#007bff;padding:15px 30px;border-radius:5px;text-decoration:none;font-weight:bold;">Войти</a>
+                </body>
+            `);
+        } catch (error) {
+            console.error(error);
+            res.status(500).send("Ошибка при активации аккаунта");
+        }
+    });
+
+    // ==================================================
+    // 3. ВХОД
     // ==================================================
     router.get('/login', (req, res) => { 
         res.send(`
@@ -131,8 +190,18 @@ export default (db) => {
             });
 
             if (user) { 
+                // Блокируем вход, если почта не подтверждена
+                if (user.isVerified === false) {
+                    return res.send(`
+                        <body style="background:#333;color:white;text-align:center;padding-top:50px;font-family:Arial;font-size:18px;">
+                            <h2 style="color: #ff4c4c;">⛔ Аккаунт не активирован</h2>
+                            <p style="color:#ccc;">Пожалуйста, проверьте вашу почту <b>${req.body.email}</b> и перейдите по ссылке в письме.</p>
+                            <br><a href="/login" style="color:#6cafff;padding:15px;border:1px solid #6cafff;border-radius:5px;text-decoration:none;">Вернуться</a>
+                        </body>
+                    `);
+                }
+
                 req.session.user = user; 
-                // 👇 ИСПРАВЛЕНИЕ: Ждем сохранения сессии перед редиректом
                 req.session.save((err) => {
                     if (err) console.error("Ошибка сохранения сессии:", err);
                     res.redirect("/profile"); 
@@ -150,7 +219,7 @@ export default (db) => {
     });
     
     // ==================================================
-    // 3. ВЫХОД И ПОЛИТИКА
+    // 4. ВЫХОД И ПОЛИТИКА
     // ==================================================
     router.post("/logout", (req, res) => { 
         req.session.destroy(() => res.redirect('/'));
@@ -175,4 +244,4 @@ export default (db) => {
     });
 
     return router;
-}; 
+};
