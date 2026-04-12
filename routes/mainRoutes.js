@@ -9,7 +9,7 @@ function isImage(filename) { return filename && filename.match(/\.(jpg|jpeg|png|
 export default (db) => {
     const router = express.Router();
 
-    const ADMIN_EMAIL = '@mail.ru'; 
+    const ADMIN_EMAIL = 'zhairem89@mail.ru'; 
 
     router.get('/clear-cache-now', async (req, res) => {
         try {
